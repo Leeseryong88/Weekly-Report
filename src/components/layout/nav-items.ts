@@ -1,5 +1,5 @@
-import { Building2, ClipboardList, FileEdit, Users, type LucideIcon } from "lucide-react";
-import { getCurrentWeekKey } from "@/lib/week-key";
+import { Building2, ClipboardList, FileEdit, Star, Users, type LucideIcon } from "lucide-react";
+import { getPartWeeklyReportPath, getTeamWeeklyReportPath } from "@/lib/week-key";
 import type { UserRole } from "@/types";
 
 export interface AppNavItem {
@@ -10,17 +10,21 @@ export interface AppNavItem {
 }
 
 export function getAppNavItems(role: UserRole): AppNavItem[] {
-  const weekKey = getCurrentWeekKey();
-
   const items: AppNavItem[] = [
     {
-      href: `/reports/team/${weekKey}`,
+      href: "/reports/weekly-summary",
+      label: "주간보고 취합",
+      icon: Star,
+      roles: ["part_leader", "admin"],
+    },
+    {
+      href: getTeamWeeklyReportPath(),
       label: "팀 주간보고",
       icon: ClipboardList,
       roles: ["team_leader", "admin"],
     },
     {
-      href: `/reports/part/${weekKey}`,
+      href: getPartWeeklyReportPath(),
       label: "파트 주간보고",
       icon: ClipboardList,
       roles: ["part_leader", "admin"],

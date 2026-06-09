@@ -1,5 +1,6 @@
 import { addDays, format, parseISO, subDays } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
+import type { UserRole } from "@/types";
 
 const KST = "Asia/Seoul";
 
@@ -22,6 +23,20 @@ export function getWeekKey(date: Date = new Date()): string {
 
 export function getCurrentWeekKey(): string {
   return getWeekKey(new Date());
+}
+
+export function getTeamWeeklyReportPath(date: Date = new Date()): string {
+  return `/reports/team/${getWeekKey(date)}`;
+}
+
+export function getPartWeeklyReportPath(date: Date = new Date()): string {
+  return `/reports/part/${getWeekKey(date)}`;
+}
+
+export function getDefaultReportPath(role: UserRole, date: Date = new Date()): string {
+  if (role === "part_leader") return getPartWeeklyReportPath(date);
+  if (role === "team_leader" || role === "admin") return getTeamWeeklyReportPath(date);
+  return "/reports";
 }
 
 export function getWeekLabel(weekKey: string): string {

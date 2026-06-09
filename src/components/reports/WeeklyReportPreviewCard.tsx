@@ -1,8 +1,7 @@
 import { Star } from "lucide-react";
-import { SubmitStatusBadge } from "@/components/ui/StatusBadge";
+import { SubmitStatusBadge, TaskStatusBadge } from "@/components/ui/StatusBadge";
 import { getReportSections, hasSectionContent, REPORT_SECTIONS } from "@/lib/report-items";
 import { cn } from "@/lib/utils";
-import { TASK_STATUS_LABELS } from "@/types";
 import type { WeeklyReport } from "@/types";
 
 const SECTION_STYLES = {
@@ -16,7 +15,7 @@ const SECTION_STYLES = {
     wrapper: "border-blue-100 bg-blue-50",
     title: "text-blue-800",
     item: "border-blue-100 bg-white",
-    label: "요청",
+    label: "의사결정",
   },
   specialNoteItems: {
     wrapper: "border-violet-100 bg-violet-50",
@@ -89,12 +88,10 @@ export function WeeklyReportPreviewCard({
                               <Star className="h-4 w-4 fill-amber-500 text-amber-500" />
                             )}
                           </span>
-                          <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-                            {TASK_STATUS_LABELS[item.status]}
-                          </span>
-                          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                            {item.progress}%
-                          </span>
+                          <TaskStatusBadge
+                            status={item.status}
+                            className="shrink-0 px-2 py-0.5 text-[11px] font-semibold"
+                          />
                         </>
                       )}
                       <p className="min-w-0 whitespace-pre-wrap text-slate-700">{item.content}</p>

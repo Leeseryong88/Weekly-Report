@@ -77,7 +77,7 @@ function TaskStatusCountBadges({ report }: { report: WeeklyReport }) {
       <span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">
         완료 {counts.completed}
       </span>
-      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+      <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
         지연 {counts.delayed}
       </span>
     </div>

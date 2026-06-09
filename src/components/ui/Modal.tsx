@@ -28,7 +28,7 @@ export function Modal({
     md: "max-w-lg",
     lg: "max-w-2xl",
     xl: "max-w-4xl",
-    full: "h-[calc(100vh-2rem)] max-w-[min(1280px,calc(100vw-2rem))]",
+    full: "h-[calc(100vh-2rem)] max-w-[min(1600px,calc(100vw-2rem))]",
   };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

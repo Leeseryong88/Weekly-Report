@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { SubmitStatusBadge, ProgressBadge } from "@/components/ui/StatusBadge";
-import { TASK_STATUS_LABELS } from "@/types";
+import { SubmitStatusBadge, ProgressBadge, TaskStatusBadge } from "@/components/ui/StatusBadge";
 import type { ReportTaskItem, WeeklyReport } from "@/types";
 import { getWeekLabel } from "@/lib/week-key";
 import { getReportSections, hasSectionContent, REPORT_SECTIONS } from "@/lib/report-items";
@@ -21,17 +20,18 @@ interface ReportDetailViewProps {
 function SectionItemsTable({ title, items }: { title: string; items: ReportTaskItem[] }) {
   const filled = items.filter((item) => item.content.trim());
   if (filled.length === 0) return null;
+  const showAssignee = filled.some((item) => item.assigneeName?.trim());
 
   return (
     <div>
       <p className="text-sm font-medium text-slate-700">{title}</p>
       <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
-        <table className="w-full min-w-[480px] text-sm">
+        <table className="w-full min-w-[520px] text-sm">
           <thead className="bg-slate-50 text-left text-xs text-slate-500">
             <tr>
               <th className="w-10 px-3 py-2 font-medium" />
+              {showAssignee && <th className="w-24 px-3 py-2 font-medium">담당자</th>}
               <th className="px-3 py-2 font-medium">내용</th>
-              <th className="w-16 px-3 py-2 font-medium">진행률</th>
               <th className="w-20 px-3 py-2 font-medium">상태</th>
             </tr>
           </thead>
@@ -43,9 +43,15 @@ function SectionItemsTable({ title, items }: { title: string; items: ReportTaskI
                   <td className="px-3 py-2">
                     {important && <Star className="h-4 w-4 fill-amber-500 text-amber-500" />}
                   </td>
+                  {showAssignee && (
+                    <td className="px-3 py-2 text-slate-600">
+                      {item.assigneeName?.trim() || "-"}
+                    </td>
+                  )}
                   <td className="whitespace-pre-wrap px-3 py-2 text-slate-700">{item.content}</td>
-                  <td className="px-3 py-2 text-slate-600">{item.progress}%</td>
-                  <td className="px-3 py-2 text-slate-600">{TASK_STATUS_LABELS[item.status]}</td>
+                  <td className="px-3 py-2">
+                    <TaskStatusBadge status={item.status} />
+                  </td>
                 </tr>
               );
             })}

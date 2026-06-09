@@ -1,5 +1,15 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthGuard } from "@/components/layout/AuthGuard";
+import { DefaultReportRedirect } from "@/components/layout/DefaultReportRedirect";
 
 export default function HomePage() {
-  redirect("/reports");
+  return (
+    <AuthProvider>
+      <AuthGuard>
+        <DefaultReportRedirect />
+      </AuthGuard>
+    </AuthProvider>
+  );
 }

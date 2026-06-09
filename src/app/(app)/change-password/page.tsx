@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, FormField } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { getDefaultReportPath } from "@/lib/week-key";
 
 export default function ChangePasswordPage() {
   const { user, firebaseUser, loading, refreshUser } = useAuth();
@@ -29,7 +30,7 @@ export default function ChangePasswordPage() {
   if (!user || !firebaseUser) return null;
 
   if (!user.mustChangePassword) {
-    router.replace("/reports");
+    router.replace(getDefaultReportPath(user.role));
     return null;
   }
 
@@ -51,7 +52,7 @@ export default function ChangePasswordPage() {
       await updatePassword(firebaseUser, password);
       await clearMustChangePassword(user.id);
       await refreshUser();
-      router.replace("/reports");
+      router.replace(getDefaultReportPath(user.role));
     } catch {
       setError("비밀번호 변경에 실패했습니다. 다시 로그인 후 시도해주세요.");
     } finally {

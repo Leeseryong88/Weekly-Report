@@ -18,10 +18,10 @@ import {
   subMonths,
 } from "date-fns";
 import {
-  Check,
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Plus,
   Save,
   Send,
   Star,
@@ -29,9 +29,9 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/Input";
-import { SubmitStatusBadge } from "@/components/ui/StatusBadge";
+import { SubmitStatusBadge, TaskStatusBadge } from "@/components/ui/StatusBadge";
 import { ReportSectionEditor } from "@/components/reports/ReportSectionEditor";
-import { getCurrentWeekKey, getWeekKey, getWeekLabel } from "@/lib/week-key";
+import { getCurrentWeekKey, getWeekKey } from "@/lib/week-key";
 import { cn } from "@/lib/utils";
 import {
   getUsersByTeam,
@@ -47,10 +47,11 @@ import {
   hasSectionContent,
   REPORT_SECTIONS,
   serializeTaskItems,
+  sortReportItems,
   type ReportFormSections,
   type ReportSectionKey,
 } from "@/lib/report-items";
-import type { WeeklyReport } from "@/types";
+import type { ReportTaskItem, WeeklyReport } from "@/types";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 interface WeeklyReportFormProps {
@@ -62,59 +63,81 @@ interface WeeklyReportFormProps {
   showHeader?: boolean;
 }
 
-const WEEKDAY_LABELS = ["토", "일", "월", "화", "수", "목", "금"];
-
-function SectionToggleBadge({
-  label,
-  checked,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  disabled?: boolean;
-  onChange?: (checked: boolean) => void;
-}) {
-  return (
-    <label
-      className={cn(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium",
-        checked
-          ? "border-blue-200 bg-blue-50 text-blue-700"
-          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-        disabled ? "cursor-default opacity-90" : "cursor-pointer"
-      )}
-    >
-      <span
-        className={cn(
-          "flex h-4 w-4 items-center justify-center rounded border",
-          checked ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white"
-        )}
-      >
-        {checked && <Check className="h-3 w-3" />}
-      </span>
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange?.(event.target.checked)}
-        className="sr-only"
-      />
-      {label}
-    </label>
-  );
+interface ReportItemAssignee {
+  userId: string | null;
+  name: string;
 }
 
-function applyLoadedSections(loaded: ReportFormSections) {
-  return {
-    sections: {
-      weeklyWorkItems: loaded.weeklyWorkItems,
-      requestItems: loaded.requestItems,
-      specialNoteItems: loaded.specialNoteItems,
-    },
-    showRequests: hasSectionContent(loaded.requestItems),
-    showSpecialNotes: hasSectionContent(loaded.specialNoteItems),
-  };
+const WEEKDAY_LABELS = ["토", "일", "월", "화", "수", "목", "금"];
+
+const SECTION_DESCRIPTIONS: Record<ReportSectionKey, string> = {
+  weeklyWorkItems: "이번 주 진행 업무를 항목별로 정리하세요.",
+  requestItems: "의사결정이 필요하거나 합의해야 하는 내용을 정리하세요.",
+  specialNoteItems: "공유가 필요한 이슈, 리스크, 참고사항을 남기세요.",
+};
+
+function SelectableMemberReportItem({
+  item,
+  selected,
+  onSelect,
+  onAdd,
+  onCancel,
+}: {
+  item: ReportTaskItem;
+  selected: boolean;
+  onSelect: () => void;
+  onAdd: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <li
+      className={cn(
+        "rounded-md bg-white px-2 py-1.5 text-xs text-slate-700 shadow-sm transition hover:bg-blue-50",
+        selected && "bg-blue-50 ring-2 ring-blue-100"
+      )}
+    >
+      <button type="button" className="w-full text-left" onClick={onSelect}>
+        <div className="flex items-start gap-1.5">
+          <span className="flex h-4 w-4 items-center justify-center">
+            {(item.importance === "high" || item.importance === "urgent") && (
+              <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+            )}
+          </span>
+          <TaskStatusBadge status={item.status} className="shrink-0 px-1.5 py-0.5 text-[10px]" />
+          <span className="min-w-0 flex-1 line-clamp-3 whitespace-pre-wrap pt-[1px]">
+            {item.content}
+          </span>
+        </div>
+      </button>
+      {selected && (
+        <div className="mt-2 flex justify-end gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={(event) => {
+              event.stopPropagation();
+              onAdd();
+            }}
+          >
+            추가
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={(event) => {
+              event.stopPropagation();
+              onCancel();
+            }}
+          >
+            취소
+          </Button>
+        </div>
+      )}
+    </li>
+  );
 }
 
 function WeekCalendar({
@@ -210,10 +233,20 @@ function TeamMemberReferencePanel({
   reports,
   memberNames,
   loading,
+  selectedItemId,
+  onSelectItem,
+  onAddItem,
 }: {
   reports: WeeklyReport[];
   memberNames: Record<string, string>;
   loading: boolean;
+  selectedItemId: string | null;
+  onSelectItem: (itemId: string | null) => void;
+  onAddItem: (
+    sectionKey: ReportSectionKey,
+    item: ReportTaskItem,
+    assignee: ReportItemAssignee
+  ) => void;
 }) {
   return (
     <aside className="space-y-3 lg:sticky lg:top-0 lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto">
@@ -238,6 +271,7 @@ function TeamMemberReferencePanel({
           <div className="space-y-3">
             {reports.map((report) => {
               const sections = getReportSections(report);
+              const memberName = memberNames[report.userId] ?? report.userId;
               const filledSections = REPORT_SECTIONS.map((section) => ({
                 section,
                 items: sections[section.key].filter((item) => item.content.trim()),
@@ -247,7 +281,7 @@ function TeamMemberReferencePanel({
                 <div key={report.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-semibold text-slate-900">
-                      {memberNames[report.userId] ?? report.userId}
+                      {memberName}
                     </p>
                     <SubmitStatusBadge status={report.submitStatus} />
                   </div>
@@ -259,36 +293,24 @@ function TeamMemberReferencePanel({
                           {section.label}
                         </p>
                         <ul className="space-y-1">
-                          {items.slice(0, 4).map((item) => (
-                            <li
-                              key={item.id}
-                              className="rounded-md bg-white px-2 py-1.5 text-xs text-slate-700"
-                            >
-                              <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                                <span className="flex h-4 w-4 items-center justify-center">
-                                  {(item.importance === "high" || item.importance === "urgent") && (
-                                    <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
-                                  )}
-                                </span>
-                                <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
-                                  {item.progress}%
-                                </span>
-                                <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
-                                  {item.status === "completed"
-                                    ? "완료"
-                                    : item.status === "delayed"
-                                      ? "지연"
-                                      : "진행중"}
-                                </span>
-                              </div>
-                              <p className="line-clamp-2 whitespace-pre-wrap">{item.content}</p>
-                            </li>
-                          ))}
-                          {items.length > 4 && (
-                            <li className="px-2 text-[11px] font-medium text-slate-400">
-                              외 {items.length - 4}건
-                            </li>
-                          )}
+                          {items.map((item) => {
+                            const itemId = `member-report:${report.id}:${section.key}:${item.id}`;
+                            return (
+                              <SelectableMemberReportItem
+                                key={item.id}
+                                item={item}
+                                selected={selectedItemId === itemId}
+                                onSelect={() => onSelectItem(itemId)}
+                                onAdd={() =>
+                                  onAddItem(section.key, item, {
+                                    userId: report.userId,
+                                    name: memberName,
+                                  })
+                                }
+                                onCancel={() => onSelectItem(null)}
+                              />
+                            );
+                          })}
                         </ul>
                       </div>
                     ))}
@@ -319,32 +341,37 @@ export function WeeklyReportForm({
   );
   const [report, setReport] = useState<WeeklyReport | null>(null);
   const [sections, setSections] = useState<ReportFormSections>(emptyFormSections);
-  const [showRequests, setShowRequests] = useState(false);
-  const [showSpecialNotes, setShowSpecialNotes] = useState(false);
   const [fileUrls, setFileUrls] = useState<string[]>([]);
   const [teamMemberReports, setTeamMemberReports] = useState<WeeklyReport[]>([]);
   const [teamMemberNames, setTeamMemberNames] = useState<Record<string, string>>({});
   const [teamMemberReportsLoading, setTeamMemberReportsLoading] = useState(false);
+  const [selectedMemberReportItemId, setSelectedMemberReportItemId] = useState<string | null>(null);
+  const [showDecisionSection, setShowDecisionSection] = useState(false);
+  const [showSpecialNoteSection, setShowSpecialNoteSection] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     if (!user) return;
+    const defaultTaskPatch: Partial<ReportTaskItem> =
+      user.role === "team_leader"
+        ? { assigneeUserId: user.id, assigneeName: user.name }
+        : {};
 
     const loadFromReport = (r: WeeklyReport | null) => {
       if (r) {
-        const applied = applyLoadedSections(getReportSections(r));
+        const loadedSections = getReportSections(r);
         setReport(r);
-        setSections(applied.sections);
-        setShowRequests(applied.showRequests);
-        setShowSpecialNotes(applied.showSpecialNotes);
+        setSections(loadedSections);
+        setShowDecisionSection(hasSectionContent(loadedSections.requestItems));
+        setShowSpecialNoteSection(hasSectionContent(loadedSections.specialNoteItems));
         setFileUrls(r.fileUrls);
       } else {
         setReport(null);
-        setSections(emptyFormSections());
-        setShowRequests(false);
-        setShowSpecialNotes(false);
+        setSections(emptyFormSections(defaultTaskPatch));
+        setShowDecisionSection(false);
+        setShowSpecialNoteSection(false);
         setFileUrls([]);
       }
     };
@@ -419,27 +446,65 @@ export function WeeklyReportForm({
   }
 
   const showTeamMemberReference = user.role === "team_leader";
+  const defaultTaskPatch: Partial<ReportTaskItem> = showTeamMemberReference
+    ? { assigneeUserId: user.id, assigneeName: user.name }
+    : {};
+  const createDefaultTaskItem = () => createEmptyTaskItem(defaultTaskPatch);
 
   const updateSection = (key: ReportSectionKey, items: ReportFormSections[ReportSectionKey]) => {
-    setSections((prev) => ({ ...prev, [key]: items }));
+    setSections((prev) => ({
+      ...prev,
+      [key]: key === "weeklyWorkItems" && items.length === 0
+        ? [createDefaultTaskItem()]
+        : sortReportItems(items),
+    }));
   };
 
-  const toggleOptionalSection = (
-    key: "requestItems" | "specialNoteItems",
-    checked: boolean
-  ) => {
-    if (key === "requestItems") {
-      setShowRequests(checked);
-      if (checked && !hasSectionContent(sections.requestItems)) {
-        setSections((prev) => ({ ...prev, requestItems: [createEmptyTaskItem()] }));
-      }
-      return;
+  const showOptionalSection = (sectionKey: "requestItems" | "specialNoteItems") => {
+    if (sectionKey === "requestItems") {
+      setShowDecisionSection(true);
+    } else {
+      setShowSpecialNoteSection(true);
     }
 
-    setShowSpecialNotes(checked);
-    if (checked && !hasSectionContent(sections.specialNoteItems)) {
-      setSections((prev) => ({ ...prev, specialNoteItems: [createEmptyTaskItem()] }));
+    setSections((prev) => ({
+      ...prev,
+      [sectionKey]: prev[sectionKey].length > 0 ? prev[sectionKey] : [createDefaultTaskItem()],
+    }));
+  };
+
+  const addMemberReportItemToSection = (
+    sectionKey: ReportSectionKey,
+    item: ReportTaskItem,
+    assignee: ReportItemAssignee
+  ) => {
+    if (!item.content.trim()) return;
+    const copiedItem: ReportTaskItem = {
+      ...item,
+      id: createEmptyTaskItem().id,
+      content: item.content.trim(),
+      assigneeUserId: assignee.userId,
+      assigneeName: assignee.name,
+    };
+    const targetSectionLabel =
+      REPORT_SECTIONS.find((section) => section.key === sectionKey)?.label ?? "주간업무";
+
+    if (sectionKey === "requestItems") {
+      setShowDecisionSection(true);
     }
+    if (sectionKey === "specialNoteItems") {
+      setShowSpecialNoteSection(true);
+    }
+
+    setSections((prev) => ({
+      ...prev,
+      [sectionKey]: sortReportItems([
+        ...prev[sectionKey].filter((item) => item.content.trim()),
+        copiedItem,
+      ]),
+    }));
+    setSelectedMemberReportItemId(null);
+    setMessage(`팀원 보고 항목을 ${targetSectionLabel}에 추가했습니다.`);
   };
 
   const handleSave = async (submitStatus: "draft" | "submitted") => {
@@ -447,19 +512,24 @@ export function WeeklyReportForm({
     setSaving(true);
     setMessage("");
     try {
-      const weeklyText = serializeTaskItems(sections.weeklyWorkItems);
-      const meta = computeReportMeta(sections);
+      const savableSections: ReportFormSections = {
+        weeklyWorkItems: sections.weeklyWorkItems,
+        requestItems: sections.requestItems.filter((item) => item.content.trim()),
+        specialNoteItems: sections.specialNoteItems.filter((item) => item.content.trim()),
+      };
+      const weeklyText = serializeTaskItems(savableSections.weeklyWorkItems);
+      const meta = computeReportMeta(savableSections);
       const id = await saveWeeklyReport(report?.id ?? null, {
         weekKey: selectedWeekKey,
         userId: user.id,
         teamId: user.teamId,
         thisWeekWork: weeklyText,
         nextWeekPlan: "",
-        requests: serializeTaskItems(sections.requestItems),
-        specialNotes: serializeTaskItems(sections.specialNoteItems),
-        weeklyWorkItems: sections.weeklyWorkItems,
-        requestItems: sections.requestItems,
-        specialNoteItems: sections.specialNoteItems,
+        requests: serializeTaskItems(savableSections.requestItems),
+        specialNotes: serializeTaskItems(savableSections.specialNoteItems),
+        weeklyWorkItems: savableSections.weeklyWorkItems,
+        requestItems: savableSections.requestItems,
+        specialNoteItems: savableSections.specialNoteItems,
         importance: meta.importance,
         status: meta.status,
         fileUrls,
@@ -470,13 +540,13 @@ export function WeeklyReportForm({
         id,
         weekKey: selectedWeekKey,
         submitStatus,
-        weeklyWorkItems: sections.weeklyWorkItems,
-        requestItems: sections.requestItems,
-        specialNoteItems: sections.specialNoteItems,
+        weeklyWorkItems: savableSections.weeklyWorkItems,
+        requestItems: savableSections.requestItems,
+        specialNoteItems: savableSections.specialNoteItems,
         thisWeekWork: weeklyText,
         nextWeekPlan: "",
-        requests: serializeTaskItems(sections.requestItems),
-        specialNotes: serializeTaskItems(sections.specialNoteItems),
+        requests: serializeTaskItems(savableSections.requestItems),
+        specialNotes: serializeTaskItems(savableSections.specialNoteItems),
         importance: meta.importance,
         status: meta.status,
         fileUrls,
@@ -509,7 +579,11 @@ export function WeeklyReportForm({
       const previousSections = getReportSections(previousReport);
       const carryOverItems = previousSections.weeklyWorkItems
         .filter((item) => item.status !== "completed" && item.content.trim())
-        .map((item) => ({ ...item, id: createEmptyTaskItem().id }));
+        .map((item) => ({
+          ...item,
+          id: createEmptyTaskItem().id,
+          ...(!item.assigneeName?.trim() ? defaultTaskPatch : {}),
+        }));
 
       if (carryOverItems.length === 0) {
         setMessage("전주 업무 중 완료되지 않은 항목이 없습니다.");
@@ -525,6 +599,18 @@ export function WeeklyReportForm({
       setMessage("전주 업무를 불러오지 못했습니다.");
     }
   };
+
+  const isSectionVisible = (sectionKey: ReportSectionKey) => {
+    if (sectionKey === "weeklyWorkItems") return true;
+    if (sectionKey === "requestItems") {
+      return showDecisionSection || hasSectionContent(sections.requestItems);
+    }
+    return showSpecialNoteSection || hasSectionContent(sections.specialNoteItems);
+  };
+  const visibleSections = REPORT_SECTIONS.filter((section) => isSectionVisible(section.key));
+  const hiddenOptionalSections = REPORT_SECTIONS.filter(
+    (section) => section.optional && !isSectionVisible(section.key)
+  );
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col bg-slate-50">
@@ -572,57 +658,53 @@ export function WeeklyReportForm({
           )}
 
           <main className="min-w-0 space-y-5">
-            <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur">
-              <SectionToggleBadge label="주간업무진행" checked disabled />
-              <SectionToggleBadge
-                label="요청사항"
-                checked={showRequests}
-                onChange={(checked) => toggleOptionalSection("requestItems", checked)}
-              />
-              <SectionToggleBadge
-                label="특이사항"
-                checked={showSpecialNotes}
-                onChange={(checked) => toggleOptionalSection("specialNoteItems", checked)}
-              />
-            </div>
-
-            <ReportSectionEditor
-              title="주간업무 진행"
-              description="이번 주 진행 업무를 항목별로 정리하세요."
-              action={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleLoadPreviousWeek}
-                  className="h-7 rounded-full border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:border-blue-300 hover:bg-blue-100"
-                >
-                  전주 불러오기
-                </Button>
-              }
-              items={sections.weeklyWorkItems}
-              onChange={(items) => updateSection("weeklyWorkItems", items)}
-            />
-
-            {showRequests && (
-                <ReportSectionEditor
-                  title="요청사항"
-                  description="협업, 의사결정, 지원이 필요한 내용을 작성하세요."
-                  simple
-                  items={sections.requestItems}
-                  onChange={(items) => updateSection("requestItems", items)}
-                />
+            {hiddenOptionalSections.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                <span className="text-xs font-semibold text-slate-500">섹션 추가</span>
+                {hiddenOptionalSections.map((section) => (
+                  <Button
+                    key={section.key}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      showOptionalSection(section.key as "requestItems" | "specialNoteItems")
+                    }
+                    className="h-8 border-dashed bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                  >
+                    <Plus className="h-4 w-4" />
+                    {section.label}
+                  </Button>
+                ))}
+              </div>
             )}
 
-            {showSpecialNotes && (
-                <ReportSectionEditor
-                  title="특이사항"
-                  description="공유가 필요한 이슈, 리스크, 참고사항을 남기세요."
-                  simple
-                  items={sections.specialNoteItems}
-                  onChange={(items) => updateSection("specialNoteItems", items)}
-                />
-            )}
+            {visibleSections.map((section) => (
+              <ReportSectionEditor
+                key={section.key}
+                title={section.label}
+                description={SECTION_DESCRIPTIONS[section.key]}
+                action={
+                  section.key === "weeklyWorkItems" ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleLoadPreviousWeek}
+                      className="h-7 rounded-full border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:border-blue-300 hover:bg-blue-100"
+                    >
+                      전주 불러오기
+                    </Button>
+                  ) : undefined
+                }
+                items={sections[section.key]}
+                onChange={(items) => updateSection(section.key, items)}
+                required={section.key === "weeklyWorkItems"}
+                showAssignee={showTeamMemberReference}
+                defaultAssigneeUserId={user.id}
+                defaultAssigneeName={user.name}
+              />
+            ))}
 
             {report?.teamLeaderComment && (
               <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm">
@@ -637,6 +719,9 @@ export function WeeklyReportForm({
               reports={teamMemberReports}
               memberNames={teamMemberNames}
               loading={teamMemberReportsLoading}
+              selectedItemId={selectedMemberReportItemId}
+              onSelectItem={setSelectedMemberReportItemId}
+              onAddItem={addMemberReportItemToSection}
             />
           )}
         </div>
@@ -671,6 +756,6 @@ export function WeeklyReportForm({
           </div>
         </div>
       </div>
-    </div>
+      </div>
   );
 }

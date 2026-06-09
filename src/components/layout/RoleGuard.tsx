@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import type { UserRole } from "@/types";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { getDefaultReportPath } from "@/lib/week-key";
 
 interface RoleGuardProps {
   allowed: UserRole[];
@@ -17,7 +18,9 @@ export function RoleGuard({ allowed, children }: RoleGuardProps) {
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
-    if (!loading && user && !allowed.includes(user.role)) router.replace("/reports");
+    if (!loading && user && !allowed.includes(user.role)) {
+      router.replace(getDefaultReportPath(user.role));
+    }
   }, [user, loading, allowed, router]);
 
   if (loading) {

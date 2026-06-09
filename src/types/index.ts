@@ -14,6 +14,8 @@ export interface ReportTaskItem {
   progress: number;
   importance: Importance;
   status: ReportTaskStatus;
+  assigneeUserId?: string | null;
+  assigneeName?: string;
 }
 
 export type ActionItemStatus = "received" | "in_progress" | "completed" | "on_hold";

@@ -1,10 +1,17 @@
 "use client";
 
-import type { SubmitStatus, Importance, ProgressStatus, ActionItemStatus } from "@/types";
+import type {
+  SubmitStatus,
+  Importance,
+  ProgressStatus,
+  ActionItemStatus,
+  ReportTaskStatus,
+} from "@/types";
 import {
   IMPORTANCE_LABELS,
   PROGRESS_LABELS,
   ACTION_STATUS_LABELS,
+  TASK_STATUS_LABELS,
 } from "@/types";
 import { Badge } from "./Badge";
 
@@ -35,10 +42,29 @@ export function ProgressBadge({ status }: { status: ProgressStatus }) {
   const map: Record<ProgressStatus, "success" | "info" | "warning" | "danger"> = {
     completed: "success",
     in_progress: "info",
-    delayed: "warning",
+    delayed: "danger",
     issue: "danger",
   };
   return <Badge variant={map[status]}>{PROGRESS_LABELS[status]}</Badge>;
+}
+
+export function TaskStatusBadge({
+  status,
+  className,
+}: {
+  status: ReportTaskStatus;
+  className?: string;
+}) {
+  const map: Record<ReportTaskStatus, "success" | "info" | "danger"> = {
+    in_progress: "info",
+    completed: "success",
+    delayed: "danger",
+  };
+  return (
+    <Badge variant={map[status]} className={className}>
+      {TASK_STATUS_LABELS[status]}
+    </Badge>
+  );
 }
 
 export function ActionStatusBadge({ status }: { status: ActionItemStatus }) {

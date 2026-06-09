@@ -1,32 +1,188 @@
 "use client";
 
 import { useRef } from "react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Plus, Star, Trash2 } from "lucide-react";
+import { GripVertical, Plus, Star, Trash2 } from "lucide-react";
 import type { ReportTaskItem, ReportTaskStatus } from "@/types";
 import { TASK_STATUS_LABELS } from "@/types";
-import { clampProgress, createEmptyTaskItem } from "@/lib/report-items";
+import {
+  createEmptyTaskItem,
+  isImportantTaskItem,
+  sortReportItems,
+} from "@/lib/report-items";
 import { cn } from "@/lib/utils";
 
 interface ReportSectionEditorProps {
   title: string;
   description?: string;
   action?: React.ReactNode;
-  simple?: boolean;
   items: ReportTaskItem[];
   onChange: (items: ReportTaskItem[]) => void;
+  required?: boolean;
+  showAssignee?: boolean;
+  defaultAssigneeUserId?: string | null;
+  defaultAssigneeName?: string;
+}
+
+interface SortableReportTaskRowProps {
+  item: ReportTaskItem;
+  important: boolean;
+  showAssignee: boolean;
+  setContentRef: (id: string, node: HTMLTextAreaElement | null) => void;
+  resizeContentTextarea: (node: HTMLTextAreaElement | null) => void;
+  onToggleImportant: (item: ReportTaskItem) => void;
+  onStatusChange: (itemId: string, status: ReportTaskStatus) => void;
+  onAssigneeChange: (itemId: string, assigneeName: string) => void;
+  onContentChange: (itemId: string, content: string, node: HTMLTextAreaElement) => void;
+  onContentKeyDown: (
+    item: ReportTaskItem,
+    event: React.KeyboardEvent<HTMLTextAreaElement>
+  ) => void;
+  onRemove: (itemId: string) => void;
+}
+
+function SortableReportTaskRow({
+  item,
+  important,
+  showAssignee,
+  setContentRef,
+  resizeContentTextarea,
+  onToggleImportant,
+  onStatusChange,
+  onAssigneeChange,
+  onContentChange,
+  onContentKeyDown,
+  onRemove,
+}: SortableReportTaskRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "grid gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:items-center md:p-2",
+        showAssignee
+          ? "md:grid-cols-[28px_36px_96px_120px_minmax(220px,1fr)_36px]"
+          : "md:grid-cols-[28px_36px_96px_minmax(220px,1fr)_36px]",
+        isDragging && "relative z-10 border-blue-300 shadow-lg ring-2 ring-blue-100"
+      )}
+    >
+      <button
+        type="button"
+        className="flex h-9 w-7 cursor-grab items-center justify-center rounded-md text-slate-300 hover:bg-slate-50 hover:text-slate-500 active:cursor-grabbing"
+        aria-label="항목 순서 변경"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={cn(
+          "h-9 w-9 px-0",
+          important
+            ? "text-amber-500 hover:bg-amber-50 hover:text-amber-600"
+            : "text-slate-300 hover:bg-amber-50 hover:text-amber-500"
+        )}
+        onClick={() => onToggleImportant(item)}
+        aria-label={important ? "중요 표시 해제" : "중요 표시"}
+      >
+        <Star className={cn("h-4 w-4", important && "fill-current")} />
+      </Button>
+
+      <div>
+        <span className="mb-1 block text-xs text-slate-400 md:hidden">상태</span>
+        <Select
+          value={item.status}
+          onChange={(e) => onStatusChange(item.id, e.target.value as ReportTaskStatus)}
+        >
+          {Object.entries(TASK_STATUS_LABELS).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      {showAssignee && (
+        <div>
+          <span className="mb-1 block text-xs text-slate-400 md:hidden">담당자</span>
+          <Input
+            value={item.assigneeName ?? ""}
+            onChange={(e) => onAssigneeChange(item.id, e.target.value)}
+            placeholder="담당자"
+          />
+        </div>
+      )}
+
+      <Textarea
+        ref={(node) => {
+          setContentRef(item.id, node);
+          resizeContentTextarea(node);
+        }}
+        value={item.content}
+        onChange={(e) => onContentChange(item.id, e.target.value, e.currentTarget)}
+        onKeyDown={(e) => onContentKeyDown(item, e)}
+        placeholder="업무 내용을 입력하세요"
+        rows={1}
+        className="min-h-[38px] min-w-0 resize-none py-2 leading-5"
+      />
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-9 w-9 justify-self-end px-0 text-slate-400 hover:text-red-500"
+        onClick={() => onRemove(item.id)}
+        aria-label="항목 삭제"
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  );
 }
 
 export function ReportSectionEditor({
   title,
   description,
   action,
-  simple = false,
   items,
   onChange,
+  required = false,
+  showAssignee = false,
+  defaultAssigneeUserId = null,
+  defaultAssigneeName = "",
 }: ReportSectionEditorProps) {
   const contentRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const resizeContentTextarea = (node: HTMLTextAreaElement | null) => {
     if (!node) return;
@@ -39,11 +195,31 @@ export function ReportSectionEditor({
   };
 
   const updateItem = (id: string, patch: Partial<ReportTaskItem>) => {
-    onChange(items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+    onChange(
+      sortReportItems(items.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+    );
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = items.findIndex((item) => item.id === active.id);
+    const newIndex = items.findIndex((item) => item.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    onChange(sortReportItems(arrayMove(items, oldIndex, newIndex)));
   };
 
   const addItem = () => {
-    const nextItem = createEmptyTaskItem();
+    const nextItem = createEmptyTaskItem(
+      showAssignee
+        ? {
+            assigneeUserId: defaultAssigneeUserId,
+            assigneeName: defaultAssigneeName,
+          }
+        : undefined
+    );
     onChange([...items, nextItem]);
     window.requestAnimationFrame(() => {
       contentRefs.current[nextItem.id]?.focus();
@@ -72,14 +248,30 @@ export function ReportSectionEditor({
 
   const removeItem = (id: string) => {
     if (items.length <= 1) {
-      onChange([createEmptyTaskItem()]);
+      onChange(
+        required
+          ? [
+              createEmptyTaskItem(
+                showAssignee
+                  ? {
+                      assigneeUserId: defaultAssigneeUserId,
+                      assigneeName: defaultAssigneeName,
+                    }
+                  : undefined
+              ),
+            ]
+          : []
+      );
       return;
     }
     onChange(items.filter((item) => item.id !== id));
   };
 
   const removeEmptyItemFromContent = (id: string) => {
-    if (items.length <= 1) return;
+    if (items.length <= 1) {
+      if (!required) onChange([]);
+      return;
+    }
     const index = items.findIndex((item) => item.id === id);
     const focusTarget = items[Math.max(0, index - 1)]?.id ?? items[index + 1]?.id;
     onChange(items.filter((item) => item.id !== id));
@@ -92,6 +284,42 @@ export function ReportSectionEditor({
     updateItem(item.id, {
       importance: item.importance === "high" ? "normal" : "high",
     });
+  };
+
+  const updateStatus = (id: string, status: ReportTaskStatus) => {
+    updateItem(id, {
+      status,
+      ...(status === "completed" ? { progress: 100 } : {}),
+    });
+  };
+
+  const updateAssigneeName = (id: string, assigneeName: string) => {
+    updateItem(id, {
+      assigneeName,
+      assigneeUserId: null,
+    });
+  };
+
+  const updateContent = (id: string, content: string, node: HTMLTextAreaElement) => {
+    updateItem(id, { content });
+    resizeContentTextarea(node);
+  };
+
+  const handleContentKeyDown = (
+    item: ReportTaskItem,
+    event: React.KeyboardEvent<HTMLTextAreaElement>
+  ) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === "Enter") {
+      if (event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      moveToNextOrAddItem(item.id);
+      return;
+    }
+    if (event.key === "Backspace" && item.content.length === 0) {
+      event.preventDefault();
+      removeEmptyItemFromContent(item.id);
+    }
   };
 
   return (
@@ -110,141 +338,43 @@ export function ReportSectionEditor({
         <div
           className={cn(
             "hidden gap-2 px-1 pb-2 text-xs font-medium text-slate-500 md:grid",
-            simple
-              ? "md:grid-cols-[minmax(220px,1fr)_36px]"
-              : "md:grid-cols-[36px_96px_78px_minmax(220px,1fr)_36px]"
+            showAssignee
+              ? "md:grid-cols-[28px_36px_96px_120px_minmax(220px,1fr)_36px]"
+              : "md:grid-cols-[28px_36px_96px_minmax(220px,1fr)_36px]"
           )}
         >
-          {!simple && (
-            <>
-              <span />
-              <span>상태</span>
-              <span>진행률</span>
-            </>
-          )}
-          <span>{simple ? "내용" : "업무내용"}</span>
+          <span />
+          <span />
+          <span>상태</span>
+          {showAssignee && <span>담당자</span>}
+          <span>내용</span>
           <span />
         </div>
 
-        <div className="space-y-2">
-          {items.map((item) => {
-            const important = item.importance === "high" || item.importance === "urgent";
-
-            return (
-              <div
-                key={item.id}
-                className={cn(
-                  "grid gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:items-center md:p-2",
-                  simple
-                    ? "md:grid-cols-[minmax(220px,1fr)_36px]"
-                    : "md:grid-cols-[36px_96px_78px_minmax(220px,1fr)_36px]"
-                )}
-              >
-                {!simple && (
-                  <>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        "h-9 w-9 px-0",
-                        important
-                          ? "text-amber-500 hover:bg-amber-50 hover:text-amber-600"
-                          : "text-slate-300 hover:bg-amber-50 hover:text-amber-500"
-                      )}
-                      onClick={() => toggleImportant(item)}
-                      aria-label={important ? "중요 표시 해제" : "중요 표시"}
-                    >
-                      <Star className={cn("h-4 w-4", important && "fill-current")} />
-                    </Button>
-
-                    <div>
-                      <span className="mb-1 block text-xs text-slate-400 md:hidden">상태</span>
-                      <Select
-                        value={item.status}
-                        onChange={(e) => {
-                          const status = e.target.value as ReportTaskStatus;
-                          updateItem(item.id, {
-                            status,
-                            ...(status === "completed" ? { progress: 100 } : {}),
-                          });
-                        }}
-                      >
-                        {Object.entries(TASK_STATUS_LABELS).map(([k, v]) => (
-                          <option key={k} value={k}>
-                            {v}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-slate-400 md:hidden">진행률</span>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={item.progress || ""}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          const progress = raw === "" ? 0 : clampProgress(Number(raw));
-                          updateItem(item.id, {
-                            progress,
-                            ...(progress === 100
-                              ? { status: "completed" as ReportTaskStatus }
-                              : {}),
-                          });
-                        }}
-                        placeholder="0"
-                        className="w-full text-center"
-                      />
-                      <span className="text-xs text-slate-400">%</span>
-                    </div>
-                  </>
-                )}
-
-                <Textarea
-                  ref={(node) => {
-                  contentRefs.current[item.id] = node;
-                  resizeContentTextarea(node);
-                }}
-                value={item.content}
-                onChange={(e) => {
-                  updateItem(item.id, { content: e.target.value });
-                  resizeContentTextarea(e.currentTarget);
-                }}
-                  onKeyDown={(e) => {
-                    if (e.nativeEvent.isComposing) return;
-                    if (e.key === "Enter") {
-                      if (e.shiftKey || e.altKey) return;
-                      e.preventDefault();
-                      moveToNextOrAddItem(item.id);
-                      return;
-                    }
-                    if (e.key === "Backspace" && item.content.length === 0) {
-                      e.preventDefault();
-                      removeEmptyItemFromContent(item.id);
-                    }
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2">
+              {items.map((item) => (
+                <SortableReportTaskRow
+                  key={item.id}
+                  item={item}
+                  important={isImportantTaskItem(item)}
+                  showAssignee={showAssignee}
+                  setContentRef={(id, node) => {
+                    contentRefs.current[id] = node;
                   }}
-                placeholder="업무 내용을 입력하세요"
-                rows={1}
-                className="min-h-[38px] min-w-0 resize-none py-2 leading-5"
-              />
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-9 w-9 justify-self-end px-0 text-slate-400 hover:text-red-500"
-                  onClick={() => removeItem(item.id)}
-                  aria-label="항목 삭제"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            );
-          })}
-        </div>
+                  resizeContentTextarea={resizeContentTextarea}
+                  onToggleImportant={toggleImportant}
+                  onStatusChange={updateStatus}
+                  onAssigneeChange={updateAssigneeName}
+                  onContentChange={updateContent}
+                  onContentKeyDown={handleContentKeyDown}
+                  onRemove={removeItem}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
 
         <div className="mt-3 flex justify-center">
           <Button
@@ -253,7 +383,7 @@ export function ReportSectionEditor({
             size="sm"
             onClick={addItem}
             className="h-9 min-w-32 border-dashed bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-            aria-label={`${simple ? "내용" : "업무내용"} 항목 추가`}
+            aria-label={`${title} 항목 추가`}
           >
             <Plus className="h-4 w-4" />
             항목 추가

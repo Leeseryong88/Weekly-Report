@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, FormField } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { getDefaultReportPath } from "@/lib/week-key";
 
 export default function LoginPage() {
   const { signIn, user, loading } = useAuth();
@@ -18,7 +19,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace(user.mustChangePassword ? "/change-password" : "/reports");
+      router.replace(
+        user.mustChangePassword ? "/change-password" : getDefaultReportPath(user.role)
+      );
     }
   }, [user, loading, router]);
 
@@ -28,7 +31,6 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await signIn(email, password);
-      router.push("/reports");
     } catch {
       setError("로그인에 실패했습니다. 이메일과 비밀번호를 확인하세요.");
     } finally {

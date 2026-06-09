@@ -4,14 +4,20 @@ import { PROGRESS_LABELS } from "@/types";
 
 export type ReportSectionKey = "weeklyWorkItems" | "requestItems" | "specialNoteItems";
 
+export const REPORT_SECTION_LABELS: Record<ReportSectionKey, string> = {
+  weeklyWorkItems: "주간업무",
+  requestItems: "의사결정사항",
+  specialNoteItems: "특이사항",
+};
+
 export const REPORT_SECTIONS: {
   key: ReportSectionKey;
   label: string;
   optional?: boolean;
 }[] = [
-  { key: "weeklyWorkItems", label: "주간업무 진행" },
-  { key: "requestItems", label: "요청사항", optional: true },
-  { key: "specialNoteItems", label: "특이사항", optional: true },
+  { key: "weeklyWorkItems", label: REPORT_SECTION_LABELS.weeklyWorkItems },
+  { key: "requestItems", label: REPORT_SECTION_LABELS.requestItems, optional: true },
+  { key: "specialNoteItems", label: REPORT_SECTION_LABELS.specialNoteItems, optional: true },
 ];
 
 export type ReportFormSections = Record<ReportSectionKey, ReportTaskItem[]>;
@@ -30,14 +36,30 @@ const STATUS_RANK: Record<ProgressStatus, number> = {
   issue: 3,
 };
 
-export function createEmptyTaskItem(): ReportTaskItem {
+export function createEmptyTaskItem(overrides: Partial<ReportTaskItem> = {}): ReportTaskItem {
   return {
     id: generateId(),
     content: "",
     progress: 0,
     importance: "normal",
     status: "in_progress",
+    ...overrides,
   };
+}
+
+export function isImportantTaskItem(item: ReportTaskItem): boolean {
+  return item.importance === "high" || item.importance === "urgent";
+}
+
+export function sortReportItems(items: ReportTaskItem[]): ReportTaskItem[] {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const importantDiff =
+        Number(isImportantTaskItem(b.item)) - Number(isImportantTaskItem(a.item));
+      return importantDiff || a.index - b.index;
+    })
+    .map(({ item }) => item);
 }
 
 export function hasSectionContent(items: ReportTaskItem[]): boolean {
@@ -72,15 +94,15 @@ function getWeeklyWorkItems(report: WeeklyReport): ReportTaskItem[] {
 
 export function getReportSections(report: WeeklyReport): ReportFormSections {
   return {
-    weeklyWorkItems: getWeeklyWorkItems(report),
-    requestItems: itemsFromStored(report.requestItems, report.requests),
-    specialNoteItems: itemsFromStored(report.specialNoteItems, report.specialNotes),
+    weeklyWorkItems: sortReportItems(getWeeklyWorkItems(report)),
+    requestItems: sortReportItems(itemsFromStored(report.requestItems, report.requests)),
+    specialNoteItems: sortReportItems(itemsFromStored(report.specialNoteItems, report.specialNotes)),
   };
 }
 
-export function emptyFormSections(): ReportFormSections {
+export function emptyFormSections(defaultItemPatch: Partial<ReportTaskItem> = {}): ReportFormSections {
   return {
-    weeklyWorkItems: [createEmptyTaskItem()],
+    weeklyWorkItems: [createEmptyTaskItem(defaultItemPatch)],
     requestItems: [],
     specialNoteItems: [],
   };
@@ -91,7 +113,7 @@ export function serializeTaskItems(items: ReportTaskItem[]): string {
     .filter((item) => item.content.trim())
     .map((item) => {
       const st = PROGRESS_LABELS[item.status];
-      return `${item.importance === "high" || item.importance === "urgent" ? "★ " : ""}${item.content} [${item.progress}%] (${st})`;
+      return `${item.importance === "high" || item.importance === "urgent" ? "★ " : ""}${item.content} (${st})`;
     })
     .join("\n");
 }
