@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   addDays,
   addMonths,
@@ -16,7 +16,7 @@ import {
   startOfWeek,
   subMonths,
 } from "date-fns";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { RoleGuard } from "@/components/layout/RoleGuard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
@@ -40,7 +40,9 @@ import { getCurrentWeekKey, getWeekKey } from "@/lib/week-key";
 import type { ReportTaskItem, Team, User, WeeklyReport } from "@/types";
 
 const WEEKDAY_LABELS = ["토", "일", "월", "화", "수", "목", "금"];
-const ITEMS_PER_PAGE = 7;
+const MAX_VISIBLE_ITEMS = 7;
+// 항목 1개 높이(패딩·본문 1줄) + space-y-1 간격 기준으로 7개 분량 높이
+const SCROLL_LIST_MAX_HEIGHT = "calc(7 * 2.75rem + 6 * 0.25rem)";
 
 const SECTION_STYLES: Record<
   ReportSectionKey,
@@ -211,22 +213,12 @@ function TeamSummaryCard({
   const items = summary.itemsBySection[activeSection];
   const styles = SECTION_STYLES[activeSection];
   const showStatus = activeSection === "weeklyWorkItems";
-  const [page, setPage] = useState(0);
-  const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
-  const hasPagination = items.length > ITEMS_PER_PAGE;
-  const visibleItems = items.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
-  const rangeStart = page * ITEMS_PER_PAGE + 1;
-  const rangeEnd = Math.min((page + 1) * ITEMS_PER_PAGE, items.length);
+  const listRef = useRef<HTMLUListElement>(null);
+  const hasScroll = items.length > MAX_VISIBLE_ITEMS;
 
   useEffect(() => {
-    setPage(0);
+    listRef.current?.scrollTo({ top: 0 });
   }, [activeSection, summary.team.id, items.length]);
-
-  useEffect(() => {
-    if (page > totalPages - 1) {
-      setPage(Math.max(0, totalPages - 1));
-    }
-  }, [page, totalPages]);
 
   return (
     <section className={cn("rounded-lg border bg-white p-3", styles.border)}>
@@ -238,10 +230,8 @@ function TeamSummaryCard({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {hasPagination && (
-            <span className="text-[10px] font-semibold text-slate-400">
-              {rangeStart}-{rangeEnd} / {items.length}
-            </span>
+          {hasScroll && (
+            <span className="text-[10px] font-semibold text-slate-400">{items.length}건</span>
           )}
           {summary.report ? (
             <SubmitStatusBadge status={summary.report.submitStatus} />
@@ -254,67 +244,47 @@ function TeamSummaryCard({
       </div>
 
       {items.length > 0 && (
-        <div className="space-y-1">
-          <ul className="space-y-1">
-            {visibleItems.map((item) => (
-              <li key={item.id} className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5">
-                <div
-                  className={cn(
-                    "grid items-start gap-1.5",
-                    showStatus
-                      ? "grid-cols-[56px_88px_minmax(0,1fr)]"
-                      : "grid-cols-[88px_minmax(0,1fr)]"
-                  )}
-                >
-                  {showStatus && (
-                    <div className="flex justify-start">
-                      <TaskStatusBadge
-                        status={item.status}
-                        className="w-12 justify-center px-0 py-0 text-[10px] font-semibold"
-                      />
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    {item.assigneeName?.trim() && (
-                      <span className="inline-flex w-full items-center justify-center truncate rounded-full bg-white px-1.5 py-0 text-[10px] font-semibold text-slate-600">
-                        {item.assigneeName}
-                      </span>
-                    )}
-                  </div>
-                  <span className="min-w-0 flex-1 whitespace-pre-wrap text-[13px] leading-5 text-slate-700">
-                    {item.content}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          {hasPagination && (
-            <div className="flex items-center justify-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setPage((current) => Math.max(0, current - 1))}
-                disabled={page === 0}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="이전 항목 보기"
-              >
-                <ChevronUp className="h-4 w-4" />
-              </button>
-              <span className="min-w-[3rem] text-center text-[11px] font-semibold text-slate-500">
-                {page + 1} / {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
-                disabled={page >= totalPages - 1}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="다음 항목 보기"
-              >
-                <ChevronDown className="h-4 w-4" />
-              </button>
-            </div>
+        <ul
+          ref={listRef}
+          className={cn(
+            "space-y-1",
+            hasScroll &&
+              "overflow-y-auto overflow-x-hidden pr-1 [scrollbar-gutter:stable] [scrollbar-color:rgb(203_213_225)_transparent] [scrollbar-width:thin]"
           )}
-        </div>
+          style={hasScroll ? { maxHeight: SCROLL_LIST_MAX_HEIGHT } : undefined}
+        >
+          {items.map((item) => (
+            <li key={item.id} className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5">
+              <div
+                className={cn(
+                  "grid items-start gap-1.5",
+                  showStatus
+                    ? "grid-cols-[56px_88px_minmax(0,1fr)]"
+                    : "grid-cols-[88px_minmax(0,1fr)]"
+                )}
+              >
+                {showStatus && (
+                  <div className="flex justify-start">
+                    <TaskStatusBadge
+                      status={item.status}
+                      className="w-12 justify-center px-0 py-0 text-[10px] font-semibold"
+                    />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  {item.assigneeName?.trim() && (
+                    <span className="inline-flex w-full items-center justify-center truncate rounded-full bg-white px-1.5 py-0 text-[10px] font-semibold text-slate-600">
+                      {item.assigneeName}
+                    </span>
+                  )}
+                </div>
+                <span className="min-w-0 flex-1 whitespace-pre-wrap text-[13px] leading-5 text-slate-700">
+                  {item.content}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );
