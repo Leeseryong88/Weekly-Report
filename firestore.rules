@@ -19,6 +19,11 @@ service cloud.firestore {
       return userExists() && getUserData().isActive == true;
     }
 
+    function isActiveUserId(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId))
+        && get(/databases/$(database)/documents/users/$(userId)).data.isActive == true;
+    }
+
     function isAdmin() {
       return isActiveUser() && getUserData().role == 'admin';
     }
@@ -44,12 +49,12 @@ service cloud.firestore {
     }
 
     function isCurrentTeamMember(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId))
+      return isActiveUserId(userId)
         && get(/databases/$(database)/documents/users/$(userId)).data.teamId == getUserData().teamId;
     }
 
     function isPasswordChangeComplete(userId) {
-      return isSignedIn()
+      return isActiveUser()
         && request.auth.uid == userId
         && resource.data.mustChangePassword == true
         && request.resource.data.mustChangePassword == false
@@ -59,9 +64,11 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isSignedIn() && (
         isAdmin() ||
-        isPartLeader() ||
-        request.auth.uid == userId ||
-        (isTeamLeader() && resource.data.teamId == getUserData().teamId)
+        (resource.data.isActive == true && (
+          isPartLeader() ||
+          request.auth.uid == userId ||
+          (isTeamLeader() && resource.data.teamId == getUserData().teamId)
+        ))
       );
       allow create: if isAdmin();
       allow update: if isAdmin() || isPasswordChangeComplete(userId);
@@ -74,22 +81,22 @@ service cloud.firestore {
     }
 
     match /weeklyReports/{reportId} {
-      allow read: if isActiveUser() && (
+      allow read: if isActiveUser() && isActiveUserId(resource.data.userId) && (
         isAdmin() ||
         isPartLeader() ||
         (isTeamLeader() && (isSameTeam(resource.data.teamId) || isCurrentTeamMember(resource.data.userId))) ||
         resource.data.userId == request.auth.uid
       );
-      allow create: if isActiveUser() && (
+      allow create: if isActiveUser() && isActiveUserId(request.resource.data.userId) && (
         isAdmin() ||
         (request.resource.data.userId == request.auth.uid)
       );
-      allow update: if isActiveUser() && (
+      allow update: if isActiveUser() && isActiveUserId(resource.data.userId) && (
         isAdmin() ||
         resource.data.userId == request.auth.uid ||
         (isTeamLeader() && isSameTeam(resource.data.teamId))
       );
-      allow delete: if isActiveUser() && (
+      allow delete: if isActiveUser() && isActiveUserId(resource.data.userId) && (
         isAdmin() ||
         resource.data.userId == request.auth.uid
       );

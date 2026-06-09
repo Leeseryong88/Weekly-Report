@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -11,6 +12,7 @@ import {
   orderBy,
   serverTimestamp,
   type QueryConstraint,
+  type Unsubscribe,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { auth, db, storage } from "@/lib/firebase";
@@ -37,19 +39,55 @@ import type {
   ReportTaskItem,
 } from "@/types";
 
+type UserQueryOptions = {
+  includeInactive?: boolean;
+};
+
 export async function getUser(uid: string): Promise<User | null> {
   const snap = await getDoc(doc(db, "users", uid));
   if (!snap.exists()) return null;
-  return docToUser(snap as never);
+  const user = docToUser(snap as never);
+  return user.isActive ? user : null;
 }
 
-export async function getAllUsers(): Promise<User[]> {
-  const snap = await getDocs(collection(db, "users"));
+export function subscribeToUser(
+  uid: string,
+  onChange: (user: User | null) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, "users", uid),
+    (snap) => {
+      if (!snap.exists()) {
+        onChange(null);
+        return;
+      }
+      const user = docToUser(snap as never);
+      onChange(user.isActive ? user : null);
+    },
+    (error) => {
+      onChange(null);
+      onError?.(error);
+    }
+  );
+}
+
+export async function getAllUsers(options: UserQueryOptions = {}): Promise<User[]> {
+  const usersRef = collection(db, "users");
+  const usersQuery = options.includeInactive
+    ? usersRef
+    : query(usersRef, where("isActive", "==", true));
+  const snap = await getDocs(usersQuery);
   return snap.docs.map((d) => docToUser(d));
 }
 
-export async function getUsersByTeam(teamId: string): Promise<User[]> {
-  const q = query(collection(db, "users"), where("teamId", "==", teamId));
+export async function getUsersByTeam(
+  teamId: string,
+  options: UserQueryOptions = {}
+): Promise<User[]> {
+  const constraints: QueryConstraint[] = [where("teamId", "==", teamId)];
+  if (!options.includeInactive) constraints.push(where("isActive", "==", true));
+  const q = query(collection(db, "users"), ...constraints);
   const snap = await getDocs(q);
   return snap.docs.map((d) => docToUser(d));
 }

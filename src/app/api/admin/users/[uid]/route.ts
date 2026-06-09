@@ -7,9 +7,16 @@ import {
   adminAuth,
   adminDb,
 } from "@/lib/firebase-admin";
+import type { UserRole } from "@/types";
+
+const VALID_ROLES: UserRole[] = ["admin", "part_leader", "team_leader", "member"];
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function hasOwn(body: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(body, key);
 }
 
 export async function PATCH(
@@ -40,15 +47,9 @@ export async function PATCH(
   const { uid } = await params;
 
   try {
-    const body = await request.json();
-    const email = typeof body.email === "string" ? body.email.trim() : "";
-
-    if (!email) {
-      return NextResponse.json({ error: "이메일은 필수입니다." }, { status: 400 });
-    }
-    if (!isValidEmail(email)) {
-      return NextResponse.json({ error: "올바른 이메일 형식이 아닙니다." }, { status: 400 });
-    }
+    const body = (await request.json()) as Record<string, unknown>;
+    const firestoreUpdates: Record<string, unknown> = {};
+    const authUpdates: Parameters<typeof adminAuth.updateUser>[1] = {};
 
     const userDoc = await adminDb.collection("users").doc(uid).get();
     if (!userDoc.exists) {
@@ -56,23 +57,66 @@ export async function PATCH(
     }
 
     const currentEmail = (userDoc.data()?.email as string | undefined)?.trim();
-    if (currentEmail === email) {
-      return NextResponse.json({ uid, email });
+
+    if (hasOwn(body, "email")) {
+      const email = typeof body.email === "string" ? body.email.trim() : "";
+      if (!email) {
+        return NextResponse.json({ error: "이메일은 필수입니다." }, { status: 400 });
+      }
+      if (!isValidEmail(email)) {
+        return NextResponse.json({ error: "올바른 이메일 형식이 아닙니다." }, { status: 400 });
+      }
+      if (currentEmail !== email) {
+        authUpdates.email = email;
+        authUpdates.emailVerified = true;
+        firestoreUpdates.email = email;
+      }
     }
 
-    await adminAuth.updateUser(uid, {
-      email,
-      emailVerified: true,
-    });
+    if (hasOwn(body, "role")) {
+      if (!VALID_ROLES.includes(body.role as UserRole)) {
+        return NextResponse.json({ error: "올바르지 않은 권한입니다." }, { status: 400 });
+      }
+      firestoreUpdates.role = body.role as UserRole;
+    }
 
-    await adminDb.collection("users").doc(uid).update({
-      email,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    if (hasOwn(body, "teamId")) {
+      if (body.teamId !== null && typeof body.teamId !== "string") {
+        return NextResponse.json({ error: "올바르지 않은 팀 정보입니다." }, { status: 400 });
+      }
+      const teamId = typeof body.teamId === "string" ? body.teamId.trim() : null;
+      firestoreUpdates.teamId = teamId || null;
+    }
 
-    return NextResponse.json({ uid, email });
+    if (hasOwn(body, "isActive")) {
+      if (typeof body.isActive !== "boolean") {
+        return NextResponse.json({ error: "올바르지 않은 계정 상태입니다." }, { status: 400 });
+      }
+      if (uid === auth.uid && body.isActive === false) {
+        return NextResponse.json({ error: "현재 로그인한 관리자 계정은 비활성화할 수 없습니다." }, { status: 400 });
+      }
+      firestoreUpdates.isActive = body.isActive;
+      authUpdates.disabled = !body.isActive;
+    }
+
+    if (Object.keys(authUpdates).length > 0) {
+      await adminAuth.updateUser(uid, authUpdates);
+    }
+
+    if (Object.keys(firestoreUpdates).length > 0) {
+      await adminDb.collection("users").doc(uid).update({
+        ...firestoreUpdates,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    return NextResponse.json({
+      uid,
+      email: (firestoreUpdates.email as string | undefined) ?? currentEmail,
+      ...firestoreUpdates,
+    });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "이메일 변경 실패";
+    const message = err instanceof Error ? err.message : "사용자 정보 변경 실패";
     if (message.includes("email-already-exists")) {
       return NextResponse.json({ error: "이미 사용 중인 이메일입니다." }, { status: 409 });
     }

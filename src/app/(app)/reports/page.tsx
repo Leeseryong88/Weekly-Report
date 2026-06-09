@@ -426,7 +426,7 @@ export default function ReportsPage() {
         const sorted = data.sort((a, b) => b.weekKey.localeCompare(a.weekKey));
         setReports(sorted);
         return;
-      } else if (user.role === "part_leader") {
+      } else if (user.role === "admin" || user.role === "part_leader") {
         const allUsers = await getAllUsers();
         const subordinateUserIds = allUsers
           .filter(

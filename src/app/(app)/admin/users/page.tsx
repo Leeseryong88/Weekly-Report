@@ -8,7 +8,7 @@ import { Select, FormField, Input } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
-import { getAllUsers, updateUser, getAllTeams } from "@/lib/firestore/services";
+import { getAllUsers, getAllTeams } from "@/lib/firestore/services";
 import { useAdminApi } from "@/hooks/useAdminApi";
 import type { User, UserRole, Team } from "@/types";
 import { ROLE_LABELS } from "@/types";
@@ -54,7 +54,7 @@ function AdminUsersContent() {
   });
 
   const load = async () => {
-    const [u, t] = await Promise.all([getAllUsers(), getAllTeams()]);
+    const [u, t] = await Promise.all([getAllUsers({ includeInactive: true }), getAllTeams()]);
     setUsers(u);
     setTeams(t);
     setLoading(false);
@@ -76,7 +76,6 @@ function AdminUsersContent() {
   };
 
   const saveEdit = async (uid: string) => {
-    const original = users.find((u) => u.id === uid);
     const newEmail = editForm.email.trim();
     if (!newEmail) {
       setEditError("이메일을 입력하세요.");
@@ -86,14 +85,12 @@ function AdminUsersContent() {
     setSaving(true);
     setEditError("");
     try {
-      if (newEmail !== original?.email) {
-        await callAdminApi(`/api/admin/users/${uid}`, { email: newEmail }, "PATCH");
-      }
-      await updateUser(uid, {
+      await callAdminApi(`/api/admin/users/${uid}`, {
+        email: newEmail,
         role: editForm.role,
         teamId: editForm.teamId || null,
         isActive: editForm.isActive,
-      });
+      }, "PATCH");
       setEditing(null);
       await load();
     } catch (err) {
@@ -140,7 +137,7 @@ function AdminUsersContent() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">사용자 관리</h2>
-          <p className="text-slate-500">관리자가 계정을 생성하고 권한·로그인 이메일을 관리합니다.</p>
+          <p className="text-slate-500">관리자가 계정을 생성하고 권한·로그인 이메일·활성 상태를 관리합니다.</p>
         </div>
         <Button
           onClick={() => {

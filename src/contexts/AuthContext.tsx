@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -8,7 +8,7 @@ import {
   type User as FirebaseUser,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { getUser } from "@/lib/firestore/services";
+import { getUser, subscribeToUser } from "@/lib/firestore/services";
 import type { User } from "@/types";
 
 interface AuthContextValue {
@@ -27,27 +27,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadProfile = useCallback(async (fbUser: FirebaseUser | null) => {
-    if (!fbUser) {
-      setUser(null);
-      return;
-    }
-    try {
-      const profile = await getUser(fbUser.uid);
-      setUser(profile);
-    } catch {
-      setUser(null);
-    }
-  }, []);
-
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+    let unsubscribeProfile: (() => void) | null = null;
+
+    const unsub = onAuthStateChanged(auth, (fbUser) => {
+      unsubscribeProfile?.();
+      unsubscribeProfile = null;
       setFirebaseUser(fbUser);
-      await loadProfile(fbUser);
-      setLoading(false);
+      setUser(null);
+
+      if (!fbUser) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      unsubscribeProfile = subscribeToUser(
+        fbUser.uid,
+        (profile) => {
+          setUser(profile);
+          setLoading(false);
+        },
+        () => {
+          setLoading(false);
+        }
+      );
     });
-    return unsub;
-  }, [loadProfile]);
+
+    return () => {
+      unsubscribeProfile?.();
+      unsub();
+    };
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
@@ -59,7 +70,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const refreshUser = async () => {
-    if (firebaseUser) await loadProfile(firebaseUser);
+    if (!firebaseUser) return;
+    try {
+      setUser(await getUser(firebaseUser.uid));
+    } catch {
+      setUser(null);
+    }
   };
 
   return (

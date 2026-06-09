@@ -37,9 +37,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4">
         <div className="max-w-md rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">계정 등록 필요</h2>
+          <h2 className="text-lg font-semibold text-slate-900">계정 확인 필요</h2>
           <p className="mt-2 text-sm text-slate-500">
-            로그인은 되었으나 사용자 프로필이 없습니다. 관리자에게 계정 생성을 요청하세요.
+            사용할 수 있는 사용자 프로필이 없습니다. 관리자에게 계정 상태 확인을 요청하세요.
           </p>
           <Button variant="ghost" className="mt-4" onClick={() => signOut()}>
             로그아웃

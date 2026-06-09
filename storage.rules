@@ -35,7 +35,7 @@ service firebase.storage {
       );
       allow write: if isSignedIn() && isActiveUser() && request.auth.uid == userId
         && request.resource.size < 10 * 1024 * 1024;
-      allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isSignedIn() && isActiveUser() && (request.auth.uid == userId || isAdmin());
     }
   }
 }
