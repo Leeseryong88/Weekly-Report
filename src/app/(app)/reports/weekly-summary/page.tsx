@@ -21,9 +21,12 @@ import { RoleGuard } from "@/components/layout/RoleGuard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { SubmitStatusBadge, TaskStatusBadge } from "@/components/ui/StatusBadge";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   getAllTeams,
   getAllUsers,
+  getTeam,
+  getUsersByTeam,
   getWeeklyReportsByUsersAndWeek,
 } from "@/lib/firestore/services";
 import {
@@ -209,11 +212,11 @@ function TeamSummaryCard({
   const showStatus = activeSection === "weeklyWorkItems";
 
   return (
-    <section className={cn("rounded-lg border bg-white p-4", styles.border)}>
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+    <section className={cn("rounded-lg border bg-white p-3", styles.border)}>
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="truncate text-base font-semibold text-slate-900">{summary.team.name}</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <h2 className="truncate text-sm font-semibold text-slate-900">{summary.team.name}</h2>
+          <p className="text-[11px] text-slate-500">
             {summary.leader?.name ?? "팀장 미지정"}
           </p>
         </div>
@@ -227,33 +230,33 @@ function TeamSummaryCard({
       </div>
 
       {items.length > 0 && (
-        <ul className="space-y-2">
+        <ul className="space-y-1">
           {items.map((item) => (
-            <li key={item.id} className="rounded-md border border-slate-100 bg-slate-50 p-3">
+            <li key={item.id} className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5">
               <div
                 className={cn(
-                  "grid items-start gap-2",
+                  "grid items-start gap-1.5",
                   showStatus
-                    ? "grid-cols-[64px_96px_minmax(0,1fr)]"
-                    : "grid-cols-[96px_minmax(0,1fr)]"
+                    ? "grid-cols-[56px_88px_minmax(0,1fr)]"
+                    : "grid-cols-[88px_minmax(0,1fr)]"
                 )}
               >
                 {showStatus && (
                   <div className="flex justify-start">
                     <TaskStatusBadge
                       status={item.status}
-                      className="w-14 justify-center px-0 py-0.5 text-[11px] font-semibold"
+                      className="w-12 justify-center px-0 py-0 text-[10px] font-semibold"
                     />
                   </div>
                 )}
                 <div className="min-w-0">
                   {item.assigneeName?.trim() && (
-                    <span className="inline-flex w-full items-center justify-center truncate rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                    <span className="inline-flex w-full items-center justify-center truncate rounded-full bg-white px-1.5 py-0 text-[10px] font-semibold text-slate-600">
                       {item.assigneeName}
                     </span>
                   )}
                 </div>
-                <span className="min-w-0 flex-1 whitespace-pre-wrap text-sm text-slate-700">
+                <span className="min-w-0 flex-1 whitespace-pre-wrap text-[13px] leading-5 text-slate-700">
                   {item.content}
                 </span>
               </div>
@@ -266,18 +269,39 @@ function TeamSummaryCard({
 }
 
 function WeeklySummaryContent() {
+  const { user } = useAuth();
   const [selectedWeekKey, setSelectedWeekKey] = useState(getCurrentWeekKey());
   const [activeSection, setActiveSection] = useState<ReportSectionKey>("weeklyWorkItems");
   const [summaries, setSummaries] = useState<TeamWeeklySummary[]>([]);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user) return;
+
     let cancelled = false;
 
     (async () => {
       setLoading(true);
       try {
-        const [teams, users] = await Promise.all([getAllTeams(), getAllUsers()]);
+        let teams: Team[];
+        let users: User[];
+
+        if (user.role === "team_leader") {
+          if (!user.teamId) {
+            if (!cancelled) setSummaries([]);
+            return;
+          }
+          const [team, teamUsers] = await Promise.all([
+            getTeam(user.teamId),
+            getUsersByTeam(user.teamId),
+          ]);
+          teams = team ? [team] : [];
+          users = teamUsers;
+        } else {
+          [teams, users] = await Promise.all([getAllTeams(), getAllUsers()]);
+        }
+
         const sortedTeams = [...teams].sort((a, b) => a.name.localeCompare(b.name, "ko"));
         const teamLeaders = sortedTeams.map((team) => getTeamLeader(team, users));
         const leaderIds = Array.from(
@@ -300,6 +324,9 @@ function WeeklySummaryContent() {
             };
           })
         );
+        setSelectedTeamIds(new Set(sortedTeams.map((team) => team.id)));
+      } catch {
+        if (!cancelled) setSummaries([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -308,12 +335,25 @@ function WeeklySummaryContent() {
     return () => {
       cancelled = true;
     };
-  }, [selectedWeekKey]);
+  }, [selectedWeekKey, user]);
+
+  const selectedWeeklySummaries = useMemo(
+    () => summaries.filter((summary) => selectedTeamIds.has(summary.team.id)),
+    [selectedTeamIds, summaries]
+  );
+
+  const visibleSummaries = useMemo(
+    () => (activeSection === "weeklyWorkItems" ? selectedWeeklySummaries : summaries),
+    [activeSection, selectedWeeklySummaries, summaries]
+  );
 
   const sectionCounts = useMemo(() => {
     return REPORT_SECTIONS.reduce<Record<ReportSectionKey, number>>(
       (counts, section) => {
-        counts[section.key] = summaries.reduce(
+        const targetSummaries =
+          section.key === "weeklyWorkItems" ? selectedWeeklySummaries : summaries;
+
+        counts[section.key] = targetSummaries.reduce(
           (total, summary) => total + summary.itemsBySection[section.key].length,
           0
         );
@@ -321,7 +361,19 @@ function WeeklySummaryContent() {
       },
       { weeklyWorkItems: 0, requestItems: 0, specialNoteItems: 0 }
     );
-  }, [summaries]);
+  }, [selectedWeeklySummaries, summaries]);
+
+  const toggleTeam = (teamId: string, checked: boolean) => {
+    setSelectedTeamIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(teamId);
+      } else {
+        next.delete(teamId);
+      }
+      return next;
+    });
+  };
 
   const selectedWeekStart = parseISO(selectedWeekKey);
 
@@ -378,25 +430,39 @@ function WeeklySummaryContent() {
               })}
             </div>
             </div>
+            {activeSection === "weeklyWorkItems" && summaries.length > 0 && (
+              <div className="mt-4 flex items-center gap-2 overflow-x-auto whitespace-nowrap rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
+                <span className="shrink-0 text-[11px] font-semibold text-slate-500">팀 표시</span>
+                {summaries.map((summary) => (
+                  <label
+                    key={summary.team.id}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-slate-700"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedTeamIds.has(summary.team.id)}
+                      onChange={(event) => toggleTeam(summary.team.id, event.target.checked)}
+                      className="h-3 w-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    {summary.team.name}
+                  </label>
+                ))}
+              </div>
+            )}
           </header>
 
         <div className="mt-6">
-          <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
-            <h2 className="text-sm font-semibold text-slate-900">
-              {REPORT_SECTIONS.find((section) => section.key === activeSection)?.label}
-            </h2>
-            <span className="text-xs font-medium text-slate-400">팀별 별표 항목</span>
-          </div>
-
           {loading ? (
             <div className="py-20">
               <LoadingSpinner />
             </div>
           ) : summaries.length === 0 ? (
             <EmptyState title="표시할 팀이 없습니다." />
+          ) : visibleSummaries.length === 0 ? (
+            <EmptyState title="선택된 팀이 없습니다." />
           ) : (
-            <div className="space-y-3">
-              {summaries.map((summary) => (
+            <div className="space-y-2">
+              {visibleSummaries.map((summary) => (
                 <TeamSummaryCard
                   key={summary.team.id}
                   summary={summary}
