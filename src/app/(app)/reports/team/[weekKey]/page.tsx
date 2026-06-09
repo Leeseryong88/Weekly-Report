@@ -17,7 +17,7 @@ import {
   startOfWeek,
   subMonths,
 } from "date-fns";
-import { Check, ChevronLeft, ChevronRight, PenLine } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, PenLine, RefreshCw } from "lucide-react";
 import { RoleGuard } from "@/components/layout/RoleGuard";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -163,6 +163,8 @@ function TeamOrgChart({
   selectedMembers,
   onToggleLeader,
   onToggleMember,
+  onRefresh,
+  refreshing,
 }: {
   team: Team | null;
   teamId: string;
@@ -174,9 +176,23 @@ function TeamOrgChart({
   selectedMembers: Set<string>;
   onToggleLeader: () => void;
   onToggleMember: (memberId: string) => void;
+  onRefresh: () => void;
+  refreshing: boolean;
 }) {
   return (
-    <div className="flex min-h-full items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-4 py-4">
+    <div className="relative flex min-h-full items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-4 pb-4 pt-12 sm:pt-4">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={onRefresh}
+        disabled={refreshing}
+        className="absolute right-3 top-3 h-8 px-2.5"
+        title="보고서 최신화"
+      >
+        <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+        <span className="hidden sm:inline">{refreshing ? "새로고침 중" : "새로고침"}</span>
+      </Button>
       <div className="flex w-full max-w-5xl flex-col items-center">
         <button
           type="button"
@@ -279,39 +295,52 @@ function TeamConsolidateContent() {
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   const [writeOpen, setWriteOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const loadData = useCallback(async () => {
-    if (!user?.teamId) return;
-    setLoading(true);
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    if (!user?.teamId) {
+      setLoading(false);
+      return;
+    }
 
-    const { weekKeys } = getMonthWeekKeys(visibleMonth);
-    const [teamMembers, teamData] = await Promise.all([
-      getUsersByTeam(user.teamId),
-      getTeam(user.teamId),
-    ]);
-    const memberList = teamMembers.filter((member) => member.role === "member");
-    const leader =
-      teamMembers.find((member) => member.id === teamData?.leaderUserId) ??
-      teamMembers.find((member) => member.role === "team_leader") ??
-      (user.role === "team_leader" ? user : null);
-    const memberIds = memberList.map((member) => member.id);
-    const reportUserIds = leader ? Array.from(new Set([leader.id, ...memberIds])) : memberIds;
-    const weeklyReportGroups = await Promise.all(
-      weekKeys.map((targetWeekKey) => getWeeklyReportsByUsersAndWeek(reportUserIds, targetWeekKey))
-    );
-    const nextReportsByWeek = new Map<string, WeeklyReport[]>();
-    weekKeys.forEach((targetWeekKey, index) => {
-      nextReportsByWeek.set(
-        targetWeekKey,
-        weeklyReportGroups[index].filter((report) => report.submitStatus === "submitted")
+    if (silent) setRefreshing(true);
+    else setLoading(true);
+
+    try {
+      const { weekKeys } = getMonthWeekKeys(visibleMonth);
+      const [teamMembers, teamData] = await Promise.all([
+        getUsersByTeam(user.teamId),
+        getTeam(user.teamId),
+      ]);
+      const memberList = teamMembers.filter((member) => member.role === "member");
+      const leader =
+        teamMembers.find((member) => member.id === teamData?.leaderUserId) ??
+        teamMembers.find((member) => member.role === "team_leader") ??
+        (user.role === "team_leader" ? user : null);
+      const memberIds = memberList.map((member) => member.id);
+      const reportUserIds = leader ? Array.from(new Set([leader.id, ...memberIds])) : memberIds;
+      const weeklyReportGroups = await Promise.all(
+        weekKeys.map((targetWeekKey) =>
+          getWeeklyReportsByUsersAndWeek(reportUserIds, targetWeekKey)
+        )
       );
-    });
+      const nextReportsByWeek = new Map<string, WeeklyReport[]>();
+      weekKeys.forEach((targetWeekKey, index) => {
+        nextReportsByWeek.set(
+          targetWeekKey,
+          weeklyReportGroups[index].filter((report) => report.submitStatus === "submitted")
+        );
+      });
 
-    setTeam(teamData);
-    setTeamLeader(leader);
-    setMembers(memberList);
-    setReportsByWeek(nextReportsByWeek);
-    setLoading(false);
+      setTeam(teamData);
+      setTeamLeader(leader);
+      setMembers(memberList);
+      setReportsByWeek(nextReportsByWeek);
+    } finally {
+      if (silent) setRefreshing(false);
+      else setLoading(false);
+    }
   }, [user, visibleMonth]);
 
   useEffect(() => {
@@ -393,6 +422,8 @@ function TeamConsolidateContent() {
               selectedMembers={selectedMembers}
               onToggleLeader={toggleSelectedLeader}
               onToggleMember={toggleSelectedMember}
+              onRefresh={() => void loadData({ silent: true })}
+              refreshing={refreshing}
             />
           </div>
 

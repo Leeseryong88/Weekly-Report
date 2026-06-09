@@ -18,8 +18,9 @@ import {
   startOfWeek,
   subMonths,
 } from "date-fns";
-import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { RoleGuard } from "@/components/layout/RoleGuard";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { WeeklyReportPreviewCard } from "@/components/reports/WeeklyReportPreviewCard";
@@ -160,6 +161,8 @@ function TeamReportOrg({
   selectedWeeklyReports,
   selectedPeople,
   onTogglePerson,
+  onRefresh,
+  refreshing,
 }: {
   teams: Team[];
   users: User[];
@@ -168,9 +171,23 @@ function TeamReportOrg({
   selectedWeeklyReports: WeeklyReport[];
   selectedPeople: Set<string>;
   onTogglePerson: (userId: string) => void;
+  onRefresh: () => void;
+  refreshing: boolean;
 }) {
   return (
-    <div className="flex min-h-full items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-4 py-4">
+    <div className="relative flex min-h-full items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-4 pb-4 pt-12 sm:pt-4">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={onRefresh}
+        disabled={refreshing}
+        className="absolute right-3 top-3 h-8 px-2.5"
+        title="보고서 최신화"
+      >
+        <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+        <span className="hidden sm:inline">{refreshing ? "새로고침 중" : "새로고침"}</span>
+      </Button>
       <div className="w-full max-w-6xl">
         <div className="flex justify-center">
           <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-2 text-sm shadow-sm">
@@ -321,37 +338,45 @@ function PartReportContent() {
   const [weeklyReportsByWeek, setWeeklyReportsByWeek] = useState<Map<string, WeeklyReport[]>>(new Map());
   const [selectedPeople, setSelectedPeople] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    const { weekKeys } = getMonthWeekKeys(visibleMonth);
-    const [allTeams, users] = await Promise.all([getAllTeams(), getAllUsers()]);
-    const reportUserIds = users
-      .filter((item) => item.role === "team_leader" || item.role === "member")
-      .map((item) => item.id);
-    const [reportGroups, weeklyReportGroups] = await Promise.all([
-      Promise.all(weekKeys.map((weekKey) => getTeamReportsByWeek(weekKey))),
-      Promise.all(
-        weekKeys.map((weekKey) => getWeeklyReportsByUsersAndWeek(reportUserIds, weekKey))
-      ),
-    ]);
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    if (silent) setRefreshing(true);
+    else setLoading(true);
 
-    const nextReportsByWeek = new Map<string, TeamReport[]>();
-    const nextWeeklyReportsByWeek = new Map<string, WeeklyReport[]>();
-    weekKeys.forEach((weekKey, index) => {
-      nextReportsByWeek.set(weekKey, reportGroups[index]);
-      nextWeeklyReportsByWeek.set(
-        weekKey,
-        weeklyReportGroups[index].filter((report) => report.submitStatus === "submitted")
-      );
-    });
+    try {
+      const { weekKeys } = getMonthWeekKeys(visibleMonth);
+      const [allTeams, users] = await Promise.all([getAllTeams(), getAllUsers()]);
+      const reportUserIds = users
+        .filter((item) => item.role === "team_leader" || item.role === "member")
+        .map((item) => item.id);
+      const [reportGroups, weeklyReportGroups] = await Promise.all([
+        Promise.all(weekKeys.map((weekKey) => getTeamReportsByWeek(weekKey))),
+        Promise.all(
+          weekKeys.map((weekKey) => getWeeklyReportsByUsersAndWeek(reportUserIds, weekKey))
+        ),
+      ]);
 
-    setTeams(allTeams);
-    setUsers(users);
-    setLeaderNames(Object.fromEntries(users.map((user: User) => [user.id, user.name])));
-    setReportsByWeek(nextReportsByWeek);
-    setWeeklyReportsByWeek(nextWeeklyReportsByWeek);
-    setLoading(false);
+      const nextReportsByWeek = new Map<string, TeamReport[]>();
+      const nextWeeklyReportsByWeek = new Map<string, WeeklyReport[]>();
+      weekKeys.forEach((weekKey, index) => {
+        nextReportsByWeek.set(weekKey, reportGroups[index]);
+        nextWeeklyReportsByWeek.set(
+          weekKey,
+          weeklyReportGroups[index].filter((report) => report.submitStatus === "submitted")
+        );
+      });
+
+      setTeams(allTeams);
+      setUsers(users);
+      setLeaderNames(Object.fromEntries(users.map((user: User) => [user.id, user.name])));
+      setReportsByWeek(nextReportsByWeek);
+      setWeeklyReportsByWeek(nextWeeklyReportsByWeek);
+    } finally {
+      if (silent) setRefreshing(false);
+      else setLoading(false);
+    }
   }, [visibleMonth]);
 
   useEffect(() => {
@@ -407,6 +432,8 @@ function PartReportContent() {
               selectedWeeklyReports={selectedWeeklyReports}
               selectedPeople={selectedPeople}
               onTogglePerson={toggleSelectedPerson}
+              onRefresh={() => void loadData({ silent: true })}
+              refreshing={refreshing}
             />
           </div>
 

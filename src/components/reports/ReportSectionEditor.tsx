@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Star, Trash2 } from "lucide-react";
+import { Plus, Star, Trash2 } from "lucide-react";
 import type { ReportTaskItem, ReportTaskStatus } from "@/types";
 import { TASK_STATUS_LABELS } from "@/types";
 import { clampProgress, createEmptyTaskItem } from "@/lib/report-items";
@@ -244,6 +244,20 @@ export function ReportSectionEditor({
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-3 flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addItem}
+            className="h-9 min-w-32 border-dashed bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+            aria-label={`${simple ? "내용" : "업무내용"} 항목 추가`}
+          >
+            <Plus className="h-4 w-4" />
+            항목 추가
+          </Button>
         </div>
       </div>
     </section>
