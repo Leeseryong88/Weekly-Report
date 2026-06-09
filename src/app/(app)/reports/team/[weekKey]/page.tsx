@@ -475,11 +475,8 @@ function TeamConsolidateContent() {
         <WeeklyReportForm
           key={`team-write-${selectedWeekKey}`}
           initialWeekKey={selectedWeekKey}
-          onSaved={(saved) => {
+          onSaved={() => {
             loadData();
-            if (saved.submitStatus === "submitted") {
-              setWriteOpen(false);
-            }
           }}
           onCancel={() => setWriteOpen(false)}
           showHeader

@@ -14,6 +14,7 @@ import {
   TASK_STATUS_LABELS,
 } from "@/types";
 import { Badge } from "./Badge";
+import { cn } from "@/lib/utils";
 
 export function SubmitStatusBadge({ status }: { status: SubmitStatus }) {
   if (status === "submitted") return <Badge variant="success">제출완료</Badge>;
@@ -45,7 +46,7 @@ export function ProgressBadge({ status }: { status: ProgressStatus }) {
     delayed: "danger",
     issue: "danger",
   };
-  return <Badge variant={map[status]}>{PROGRESS_LABELS[status]}</Badge>;
+  return <Badge variant={map[status]} className="shrink-0 whitespace-nowrap">{PROGRESS_LABELS[status]}</Badge>;
 }
 
 export function TaskStatusBadge({
@@ -61,7 +62,7 @@ export function TaskStatusBadge({
     delayed: "danger",
   };
   return (
-    <Badge variant={map[status]} className={className}>
+    <Badge variant={map[status]} className={cn("shrink-0 whitespace-nowrap", className)}>
       {TASK_STATUS_LABELS[status]}
     </Badge>
   );

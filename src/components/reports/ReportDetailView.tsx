@@ -17,7 +17,15 @@ interface ReportDetailViewProps {
   onDelete?: () => Promise<void>;
 }
 
-function SectionItemsTable({ title, items }: { title: string; items: ReportTaskItem[] }) {
+function SectionItemsTable({
+  title,
+  items,
+  showStatus = false,
+}: {
+  title: string;
+  items: ReportTaskItem[];
+  showStatus?: boolean;
+}) {
   const filled = items.filter((item) => item.content.trim());
   if (filled.length === 0) return null;
   const showAssignee = filled.some((item) => item.assigneeName?.trim());
@@ -31,8 +39,8 @@ function SectionItemsTable({ title, items }: { title: string; items: ReportTaskI
             <tr>
               <th className="w-10 px-3 py-2 font-medium" />
               {showAssignee && <th className="w-24 px-3 py-2 font-medium">담당자</th>}
+              {showStatus && <th className="w-[4.5rem] px-3 py-2 font-medium">상태</th>}
               <th className="px-3 py-2 font-medium">내용</th>
-              <th className="w-20 px-3 py-2 font-medium">상태</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -40,18 +48,20 @@ function SectionItemsTable({ title, items }: { title: string; items: ReportTaskI
               const important = item.importance === "high" || item.importance === "urgent";
               return (
                 <tr key={item.id}>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2 align-top">
                     {important && <Star className="h-4 w-4 fill-amber-500 text-amber-500" />}
                   </td>
                   {showAssignee && (
-                    <td className="px-3 py-2 text-slate-600">
+                    <td className="px-3 py-2 align-top text-slate-600">
                       {item.assigneeName?.trim() || "-"}
                     </td>
                   )}
+                  {showStatus && (
+                    <td className="px-3 py-2 align-top">
+                      <TaskStatusBadge status={item.status} />
+                    </td>
+                  )}
                   <td className="whitespace-pre-wrap px-3 py-2 text-slate-700">{item.content}</td>
-                  <td className="px-3 py-2">
-                    <TaskStatusBadge status={item.status} />
-                  </td>
                 </tr>
               );
             })}
@@ -102,7 +112,14 @@ export function ReportDetailView({
       {REPORT_SECTIONS.map((section) => {
         const items = sections[section.key];
         if (section.optional && !hasSectionContent(items)) return null;
-        return <SectionItemsTable key={section.key} title={section.label} items={items} />;
+        return (
+          <SectionItemsTable
+            key={section.key}
+            title={section.label}
+            items={items}
+            showStatus={section.key === "weeklyWorkItems"}
+          />
+        );
       })}
 
       {report.fileUrls.length > 0 && (

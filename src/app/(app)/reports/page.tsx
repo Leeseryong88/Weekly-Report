@@ -794,12 +794,8 @@ export default function ReportsPage() {
           initialWeekKey={editReport?.weekKey ?? writeWeekKey}
           initialReport={editReport}
           lockWeek={!!editReport}
-          onSaved={(saved) => {
+          onSaved={() => {
             handleSaved();
-            if (saved.submitStatus === "submitted") {
-              setWriteOpen(false);
-              setEditReport(null);
-            }
           }}
           onCancel={() => {
             setWriteOpen(false);
