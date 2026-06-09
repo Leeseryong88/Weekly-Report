@@ -31,12 +31,12 @@ import { cn } from "@/lib/utils";
 import { getWeekKey } from "@/lib/week-key";
 import type { Team, User, WeeklyReport } from "@/types";
 
-const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+const WEEKDAY_LABELS = ["토", "일", "월", "화", "수", "목", "금"];
 
 function getMonthWeekKeys(month: Date) {
   const days = eachDayOfInterval({
-    start: startOfWeek(startOfMonth(month), { weekStartsOn: 0 }),
-    end: endOfWeek(endOfMonth(month), { weekStartsOn: 0 }),
+    start: startOfWeek(startOfMonth(month), { weekStartsOn: 6 }),
+    end: endOfWeek(endOfMonth(month), { weekStartsOn: 6 }),
   });
   const keys = new Set<string>();
   days.forEach((day) => keys.add(getWeekKey(day)));
@@ -103,13 +103,11 @@ function TeamSubmissionCalendar({
         {days.map((day) => {
           const dayWeekKey = getWeekKey(day);
           const inCurrentMonth = isSameMonth(day, visibleMonth);
-          const isWeekday = day.getDay() >= 1 && day.getDay() <= 5;
           const isHoveredWeek = hoveredDate
-            ? isSameWeek(day, hoveredDate, { weekStartsOn: 1 }) && isWeekday
+            ? isSameWeek(day, hoveredDate, { weekStartsOn: 6 })
             : false;
-          const isSelectedWeek =
-            isSameWeek(day, selectedWeekStart, { weekStartsOn: 1 }) && isWeekday;
-          const isWeekStart = day.getDay() === 1;
+          const isSelectedWeek = isSameWeek(day, selectedWeekStart, { weekStartsOn: 6 });
+          const isWeekStart = day.getDay() === 6;
           const isWeekEnd = day.getDay() === 5;
 
           return (
@@ -127,8 +125,9 @@ function TeamSubmissionCalendar({
                 inCurrentMonth && "text-slate-700",
                 isHoveredWeek && !isSelectedWeek && "bg-slate-200",
                 isSelectedWeek && "bg-blue-100 font-semibold text-blue-800",
-                isSameDay(day, selectedWeekStart) && "rounded-l-full bg-blue-600 text-white",
-                isSameDay(day, addDays(selectedWeekStart, 4)) && "rounded-r-full",
+                isSameDay(day, selectedWeekStart) && "rounded-l-full",
+                isSameDay(day, addDays(selectedWeekStart, 6)) &&
+                  "rounded-r-full bg-blue-600 text-white",
                 isSameDay(day, today) && !isSelectedWeek && "font-semibold text-blue-600"
               )}
             >
@@ -146,7 +145,7 @@ function TeamSubmissionCalendar({
           submittedCount === 0 && "bg-slate-50 text-slate-500"
         )}
       >
-        {format(selectedWeekStart, "M/d")} - {format(addDays(selectedWeekStart, 4), "M/d")} ·{" "}
+        {format(selectedWeekStart, "M/d")} - {format(addDays(selectedWeekStart, 6), "M/d")} ·{" "}
         {submittedCount}/{totalCount} 제출
       </div>
     </div>
@@ -397,7 +396,7 @@ function TeamConsolidateContent() {
             />
           </div>
 
-          <div className="min-h-[520px] rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="min-h-[520px] overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
             {selectedReportsByMember.length === 0 ? (
               <div className="flex h-full min-h-[420px] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
                 팀원을 선택하면 제출한 주간보고를 카드로 확인할 수 있습니다.
@@ -407,10 +406,9 @@ function TeamConsolidateContent() {
                 className={cn(
                   "grid gap-4",
                   selectedReportsByMember.length === 1 && "grid-cols-1",
-                  selectedReportsByMember.length === 2 && "lg:grid-cols-2",
-                  selectedReportsByMember.length === 3 && "lg:grid-cols-2 2xl:grid-cols-3",
-                  selectedReportsByMember.length >= 4 &&
-                    "lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+                  selectedReportsByMember.length === 2 && "grid-cols-2 min-w-[38rem]",
+                  selectedReportsByMember.length === 3 && "grid-cols-3 min-w-[57rem]",
+                  selectedReportsByMember.length >= 4 && "grid-cols-4 min-w-[76rem]"
                 )}
               >
                 {selectedReportsByMember.map(({ member, report }) => (

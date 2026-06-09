@@ -41,11 +41,11 @@ import { cn } from "@/lib/utils";
 import type { WeeklyReport, Team, User, ReportTaskStatus } from "@/types";
 
 const CAN_WRITE_ROLES = ["member", "team_leader"];
-const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+const WEEKDAY_LABELS = ["토", "일", "월", "화", "수", "목", "금"];
 
 function weekRangeLabel(weekKey: string) {
   const start = parseISO(weekKey);
-  const end = addDays(start, 4);
+  const end = addDays(start, 6);
   return `${format(start, "M/d")} - ${format(end, "M/d")}`;
 }
 
@@ -157,8 +157,8 @@ function MemberWeekCalendar({
   const [visibleMonth, setVisibleMonth] = useState(currentWeekStart);
   const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
   const days = eachDayOfInterval({
-    start: startOfWeek(startOfMonth(visibleMonth), { weekStartsOn: 0 }),
-    end: endOfWeek(endOfMonth(visibleMonth), { weekStartsOn: 0 }),
+    start: startOfWeek(startOfMonth(visibleMonth), { weekStartsOn: 6 }),
+    end: endOfWeek(endOfMonth(visibleMonth), { weekStartsOn: 6 }),
   });
   const weeks = Array.from({ length: Math.ceil(days.length / 7) }, (_, index) =>
     days.slice(index * 7, index * 7 + 7)
@@ -214,22 +214,22 @@ function MemberWeekCalendar({
         ))}
 
         {weeks.map((week) => {
-          const monday = week[1];
-          const weekKey = getWeekKey(monday);
+          const weekStart = week[0];
+          const weekKey = getWeekKey(weekStart);
           const report = reportByWeek.get(weekKey) ?? null;
           const submitted = report?.submitStatus === "submitted";
           const draft = report?.submitStatus === "draft";
           const isCurrentWeek = weekKey === currentWeekKey;
           const status = getStatus(weekKey);
           const isHoveredWeek = hoveredDate
-            ? isSameWeek(monday, hoveredDate, { weekStartsOn: 1 })
+            ? isSameWeek(weekStart, hoveredDate, { weekStartsOn: 6 })
             : false;
 
           return (
             <div key={weekKey} className="relative col-span-7 grid grid-cols-7">
               <div
                 className={cn(
-                  "pointer-events-none absolute left-[calc(100%/7)] right-[calc(100%/7)] top-8 z-10 flex h-6 items-center justify-center rounded-full text-xs font-semibold shadow-sm",
+                  "pointer-events-none absolute left-1 right-1 top-8 z-10 flex h-6 items-center justify-center rounded-full text-xs font-semibold shadow-sm",
                   submitted && "bg-green-100 text-green-700",
                   draft && "bg-amber-100 text-amber-700",
                   isCurrentWeek && !submitted && !draft && "bg-blue-100 text-blue-700",
@@ -242,7 +242,6 @@ function MemberWeekCalendar({
               {week.map((day) => {
                 const dayWeekKey = getWeekKey(day);
                 const dayReport = reportByWeek.get(dayWeekKey) ?? null;
-                const isWeekday = day.getDay() >= 1 && day.getDay() <= 5;
 
                 return (
                   <button
@@ -255,11 +254,10 @@ function MemberWeekCalendar({
                       "relative min-h-16 border-b border-r border-slate-200 p-1 text-left transition-colors",
                       !isSameMonth(day, visibleMonth) && "bg-slate-50 text-slate-300",
                       isSameMonth(day, visibleMonth) && "bg-white text-slate-700",
-                      isHoveredWeek && isWeekday && "bg-slate-100",
-                      submitted && isWeekday && "bg-green-50 hover:bg-green-100",
-                      draft && isWeekday && "bg-amber-50 hover:bg-amber-100",
+                      isHoveredWeek && "bg-slate-100",
+                      submitted && "bg-green-50 hover:bg-green-100",
+                      draft && "bg-amber-50 hover:bg-amber-100",
                       isCurrentWeek &&
-                        isWeekday &&
                         !submitted &&
                         !draft &&
                         "bg-blue-50 hover:bg-blue-100"

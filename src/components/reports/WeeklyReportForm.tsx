@@ -62,7 +62,7 @@ interface WeeklyReportFormProps {
   showHeader?: boolean;
 }
 
-const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+const WEEKDAY_LABELS = ["토", "일", "월", "화", "수", "목", "금"];
 
 function SectionToggleBadge({
   label,
@@ -129,8 +129,8 @@ function WeekCalendar({
   const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
   const today = new Date();
   const days = eachDayOfInterval({
-    start: startOfWeek(startOfMonth(visibleMonth), { weekStartsOn: 0 }),
-    end: endOfWeek(endOfMonth(visibleMonth), { weekStartsOn: 0 }),
+    start: startOfWeek(startOfMonth(visibleMonth), { weekStartsOn: 6 }),
+    end: endOfWeek(endOfMonth(visibleMonth), { weekStartsOn: 6 }),
   });
 
   useEffect(() => {
@@ -169,13 +169,11 @@ function WeekCalendar({
       <div className="mt-1 grid grid-cols-7 gap-0.5" onMouseLeave={() => setHoveredDate(null)}>
         {days.map((day) => {
           const inCurrentMonth = isSameMonth(day, visibleMonth);
-          const isWeekday = day.getDay() >= 1 && day.getDay() <= 5;
           const isHoveredWeek = hoveredDate
-            ? isSameWeek(day, hoveredDate, { weekStartsOn: 1 }) && isWeekday
+            ? isSameWeek(day, hoveredDate, { weekStartsOn: 6 })
             : false;
-          const isSelectedWeek =
-            isSameWeek(day, selectedWeekStart, { weekStartsOn: 1 }) && isWeekday;
-          const isWeekStart = day.getDay() === 1;
+          const isSelectedWeek = isSameWeek(day, selectedWeekStart, { weekStartsOn: 6 });
+          const isWeekStart = day.getDay() === 6;
           const isWeekEnd = day.getDay() === 5;
 
           return (
@@ -193,8 +191,9 @@ function WeekCalendar({
                 inCurrentMonth && "text-slate-700",
                 isHoveredWeek && !isSelectedWeek && "bg-slate-200",
                 isSelectedWeek && "bg-blue-100 font-semibold text-blue-800",
-                isSameDay(day, selectedWeekStart) && "rounded-l-full bg-blue-600 text-white",
-                isSameDay(day, addDays(selectedWeekStart, 4)) && "rounded-r-full",
+                isSameDay(day, selectedWeekStart) && "rounded-l-full",
+                isSameDay(day, addDays(selectedWeekStart, 6)) &&
+                  "rounded-r-full bg-blue-600 text-white",
                 isSameDay(day, today) && !isSelectedWeek && "font-semibold text-blue-600"
               )}
             >
@@ -412,7 +411,7 @@ export function WeeklyReportForm({
   }, [user, selectedWeekKey]);
 
   const weekStart = parseISO(selectedWeekKey);
-  const weekEnd = addDays(weekStart, 4);
+  const weekEnd = addDays(weekStart, 6);
 
   if (loading) return <LoadingSpinner />;
   if (!user?.teamId) {
@@ -559,7 +558,7 @@ export function WeeklyReportForm({
                   )}
                 </div>
                 <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {format(weekStart, "M/d")} 월요일 - {format(weekEnd, "M/d")} 금요일
+                  {format(weekStart, "M/d")} 토요일 - {format(weekEnd, "M/d")} 금요일
                 </p>
               </div>
 
