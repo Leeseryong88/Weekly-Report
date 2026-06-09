@@ -1,0 +1,141 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isActiveUser() {
+      return userExists() && getUserData().isActive == true;
+    }
+
+    function isAdmin() {
+      return isActiveUser() && getUserData().role == 'admin';
+    }
+
+    function isPartLeader() {
+      return isActiveUser() && getUserData().role == 'part_leader';
+    }
+
+    function isTeamLeader() {
+      return isActiveUser() && getUserData().role == 'team_leader';
+    }
+
+    function isMember() {
+      return isActiveUser() && getUserData().role == 'member';
+    }
+
+    function isSameTeam(teamId) {
+      return getUserData().teamId == teamId;
+    }
+
+    function canReadTeam(teamId) {
+      return isAdmin() || isPartLeader() || (isTeamLeader() && isSameTeam(teamId));
+    }
+
+    function isCurrentTeamMember(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId))
+        && get(/databases/$(database)/documents/users/$(userId)).data.teamId == getUserData().teamId;
+    }
+
+    function isPasswordChangeComplete(userId) {
+      return isSignedIn()
+        && request.auth.uid == userId
+        && resource.data.mustChangePassword == true
+        && request.resource.data.mustChangePassword == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mustChangePassword', 'updatedAt']);
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        isPartLeader() ||
+        request.auth.uid == userId ||
+        (isTeamLeader() && resource.data.teamId == getUserData().teamId)
+      );
+      allow create: if isAdmin();
+      allow update: if isAdmin() || isPasswordChangeComplete(userId);
+      allow delete: if isAdmin();
+    }
+
+    match /teams/{teamId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /weeklyReports/{reportId} {
+      allow read: if isActiveUser() && (
+        isAdmin() ||
+        isPartLeader() ||
+        (isTeamLeader() && (isSameTeam(resource.data.teamId) || isCurrentTeamMember(resource.data.userId))) ||
+        resource.data.userId == request.auth.uid
+      );
+      allow create: if isActiveUser() && (
+        isAdmin() ||
+        (request.resource.data.userId == request.auth.uid)
+      );
+      allow update: if isActiveUser() && (
+        isAdmin() ||
+        resource.data.userId == request.auth.uid ||
+        (isTeamLeader() && isSameTeam(resource.data.teamId))
+      );
+      allow delete: if isActiveUser() && (
+        isAdmin() ||
+        resource.data.userId == request.auth.uid
+      );
+    }
+
+    match /teamReports/{reportId} {
+      allow read: if isActiveUser() && (
+        isAdmin() ||
+        isPartLeader() ||
+        (isTeamLeader() && isSameTeam(resource.data.teamId)) ||
+        (isMember() && isSameTeam(resource.data.teamId) && resource.data.submitStatus == 'submitted')
+      );
+      allow create, update: if isActiveUser() && (
+        isAdmin() ||
+        (isTeamLeader() && isSameTeam(request.resource.data.teamId))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /partReports/{reportId} {
+      allow read: if isActiveUser() && (isAdmin() || isPartLeader() || isTeamLeader());
+      allow create, update: if isActiveUser() && (isAdmin() || isPartLeader());
+      allow delete: if isAdmin();
+    }
+
+    match /actionItems/{itemId} {
+      allow read: if isActiveUser() && (
+        isAdmin() ||
+        isPartLeader() ||
+        (isTeamLeader() && resource.data.teamId == getUserData().teamId) ||
+        resource.data.assigneeUserId == request.auth.uid
+      );
+      allow create: if isActiveUser() && (isAdmin() || isPartLeader() || isTeamLeader());
+      allow update: if isActiveUser() && (
+        isAdmin() ||
+        isPartLeader() ||
+        (isTeamLeader() && resource.data.teamId == getUserData().teamId) ||
+        resource.data.assigneeUserId == request.auth.uid
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /comments/{commentId} {
+      allow read: if isActiveUser();
+      allow create: if isActiveUser();
+      allow update, delete: if isAdmin() || resource.data.writerUserId == request.auth.uid;
+    }
+  }
+}

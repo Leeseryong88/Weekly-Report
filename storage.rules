@@ -1,0 +1,41 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isActiveUser() {
+      return getUserData().isActive == true;
+    }
+
+    function isAdmin() {
+      return isActiveUser() && getUserData().role == 'admin';
+    }
+
+    function isPartLeader() {
+      return isActiveUser() && getUserData().role == 'part_leader';
+    }
+
+    function isTeamLeader() {
+      return isActiveUser() && getUserData().role == 'team_leader';
+    }
+
+    match /reports/{userId}/{weekKey}/{fileName} {
+      allow read: if isSignedIn() && isActiveUser() && (
+        isAdmin() ||
+        isPartLeader() ||
+        (isTeamLeader() && getUserData().teamId != null) ||
+        request.auth.uid == userId
+      );
+      allow write: if isSignedIn() && isActiveUser() && request.auth.uid == userId
+        && request.resource.size < 10 * 1024 * 1024;
+      allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    }
+  }
+}
