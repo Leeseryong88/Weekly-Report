@@ -206,6 +206,7 @@ function TeamSummaryCard({
 }) {
   const items = summary.itemsBySection[activeSection];
   const styles = SECTION_STYLES[activeSection];
+  const showStatus = activeSection === "weeklyWorkItems";
 
   return (
     <section className={cn("rounded-lg border bg-white p-4", styles.border)}>
@@ -229,13 +230,22 @@ function TeamSummaryCard({
         <ul className="space-y-2">
           {items.map((item) => (
             <li key={item.id} className="rounded-md border border-slate-100 bg-slate-50 p-3">
-              <div className="grid grid-cols-[64px_96px_minmax(0,1fr)] items-start gap-2">
-                <div className="flex justify-start">
-                  <TaskStatusBadge
-                    status={item.status}
-                    className="w-14 justify-center px-0 py-0.5 text-[11px] font-semibold"
-                  />
-                </div>
+              <div
+                className={cn(
+                  "grid items-start gap-2",
+                  showStatus
+                    ? "grid-cols-[64px_96px_minmax(0,1fr)]"
+                    : "grid-cols-[96px_minmax(0,1fr)]"
+                )}
+              >
+                {showStatus && (
+                  <div className="flex justify-start">
+                    <TaskStatusBadge
+                      status={item.status}
+                      className="w-14 justify-center px-0 py-0.5 text-[11px] font-semibold"
+                    />
+                  </div>
+                )}
                 <div className="min-w-0">
                   {item.assigneeName?.trim() && (
                     <span className="inline-flex w-full items-center justify-center truncate rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
@@ -404,7 +414,7 @@ function WeeklySummaryContent() {
 
 export default function WeeklySummaryPage() {
   return (
-    <RoleGuard allowed={["part_leader", "admin"]}>
+    <RoleGuard allowed={["team_leader", "part_leader", "admin"]}>
       <WeeklySummaryContent />
     </RoleGuard>
   );

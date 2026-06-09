@@ -33,9 +33,13 @@ export function getPartWeeklyReportPath(date: Date = new Date()): string {
   return `/reports/part/${getWeekKey(date)}`;
 }
 
+export function getWeeklySummaryPath(): string {
+  return "/reports/weekly-summary";
+}
+
 export function getDefaultReportPath(role: UserRole, date: Date = new Date()): string {
-  if (role === "part_leader") return getPartWeeklyReportPath(date);
-  if (role === "team_leader" || role === "admin") return getTeamWeeklyReportPath(date);
+  if (role === "part_leader" || role === "team_leader") return getWeeklySummaryPath();
+  if (role === "admin") return getTeamWeeklyReportPath(date);
   return "/reports";
 }
 

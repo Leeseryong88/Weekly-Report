@@ -1,5 +1,9 @@
 import { Building2, ClipboardList, FileEdit, Star, Users, type LucideIcon } from "lucide-react";
-import { getPartWeeklyReportPath, getTeamWeeklyReportPath } from "@/lib/week-key";
+import {
+  getPartWeeklyReportPath,
+  getTeamWeeklyReportPath,
+  getWeeklySummaryPath,
+} from "@/lib/week-key";
 import type { UserRole } from "@/types";
 
 export interface AppNavItem {
@@ -12,10 +16,10 @@ export interface AppNavItem {
 export function getAppNavItems(role: UserRole): AppNavItem[] {
   const items: AppNavItem[] = [
     {
-      href: "/reports/weekly-summary",
+      href: getWeeklySummaryPath(),
       label: "주간보고 취합",
       icon: Star,
-      roles: ["part_leader", "admin"],
+      roles: ["team_leader", "part_leader", "admin"],
     },
     {
       href: getTeamWeeklyReportPath(),

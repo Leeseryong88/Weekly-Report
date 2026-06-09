@@ -700,6 +700,7 @@ export function WeeklyReportForm({
                 items={sections[section.key]}
                 onChange={(items) => updateSection(section.key, items)}
                 required={section.key === "weeklyWorkItems"}
+                showStatus={section.key === "weeklyWorkItems"}
                 showAssignee={showTeamMemberReference}
                 defaultAssigneeUserId={user.id}
                 defaultAssigneeName={user.name}

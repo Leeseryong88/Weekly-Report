@@ -37,6 +37,7 @@ interface ReportSectionEditorProps {
   items: ReportTaskItem[];
   onChange: (items: ReportTaskItem[]) => void;
   required?: boolean;
+  showStatus?: boolean;
   showAssignee?: boolean;
   defaultAssigneeUserId?: string | null;
   defaultAssigneeName?: string;
@@ -45,6 +46,7 @@ interface ReportSectionEditorProps {
 interface SortableReportTaskRowProps {
   item: ReportTaskItem;
   important: boolean;
+  showStatus: boolean;
   showAssignee: boolean;
   setContentRef: (id: string, node: HTMLTextAreaElement | null) => void;
   resizeContentTextarea: (node: HTMLTextAreaElement | null) => void;
@@ -62,6 +64,7 @@ interface SortableReportTaskRowProps {
 function SortableReportTaskRow({
   item,
   important,
+  showStatus,
   showAssignee,
   setContentRef,
   resizeContentTextarea,
@@ -83,9 +86,13 @@ function SortableReportTaskRow({
       style={style}
       className={cn(
         "grid gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:items-center md:p-2",
-        showAssignee
+        showStatus && showAssignee
           ? "md:grid-cols-[28px_36px_96px_120px_minmax(220px,1fr)_36px]"
-          : "md:grid-cols-[28px_36px_96px_minmax(220px,1fr)_36px]",
+          : showStatus
+            ? "md:grid-cols-[28px_36px_96px_minmax(220px,1fr)_36px]"
+            : showAssignee
+              ? "md:grid-cols-[28px_36px_120px_minmax(220px,1fr)_36px]"
+              : "md:grid-cols-[28px_36px_minmax(220px,1fr)_36px]",
         isDragging && "relative z-10 border-blue-300 shadow-lg ring-2 ring-blue-100"
       )}
     >
@@ -115,19 +122,21 @@ function SortableReportTaskRow({
         <Star className={cn("h-4 w-4", important && "fill-current")} />
       </Button>
 
-      <div>
-        <span className="mb-1 block text-xs text-slate-400 md:hidden">상태</span>
-        <Select
-          value={item.status}
-          onChange={(e) => onStatusChange(item.id, e.target.value as ReportTaskStatus)}
-        >
-          {Object.entries(TASK_STATUS_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </Select>
-      </div>
+      {showStatus && (
+        <div>
+          <span className="mb-1 block text-xs text-slate-400 md:hidden">상태</span>
+          <Select
+            value={item.status}
+            onChange={(e) => onStatusChange(item.id, e.target.value as ReportTaskStatus)}
+          >
+            {Object.entries(TASK_STATUS_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
 
       {showAssignee && (
         <div>
@@ -174,6 +183,7 @@ export function ReportSectionEditor({
   items,
   onChange,
   required = false,
+  showStatus = true,
   showAssignee = false,
   defaultAssigneeUserId = null,
   defaultAssigneeName = "",
@@ -338,14 +348,18 @@ export function ReportSectionEditor({
         <div
           className={cn(
             "hidden gap-2 px-1 pb-2 text-xs font-medium text-slate-500 md:grid",
-            showAssignee
+            showStatus && showAssignee
               ? "md:grid-cols-[28px_36px_96px_120px_minmax(220px,1fr)_36px]"
-              : "md:grid-cols-[28px_36px_96px_minmax(220px,1fr)_36px]"
+              : showStatus
+                ? "md:grid-cols-[28px_36px_96px_minmax(220px,1fr)_36px]"
+                : showAssignee
+                  ? "md:grid-cols-[28px_36px_120px_minmax(220px,1fr)_36px]"
+                  : "md:grid-cols-[28px_36px_minmax(220px,1fr)_36px]"
           )}
         >
           <span />
           <span />
-          <span>상태</span>
+          {showStatus && <span>상태</span>}
           {showAssignee && <span>담당자</span>}
           <span>내용</span>
           <span />
@@ -359,6 +373,7 @@ export function ReportSectionEditor({
                   key={item.id}
                   item={item}
                   important={isImportantTaskItem(item)}
+                  showStatus={showStatus}
                   showAssignee={showAssignee}
                   setContentRef={(id, node) => {
                     contentRefs.current[id] = node;
