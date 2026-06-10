@@ -16,9 +16,25 @@ import {
 import { Badge } from "./Badge";
 import { cn } from "@/lib/utils";
 
-export function SubmitStatusBadge({ status }: { status: SubmitStatus }) {
-  if (status === "submitted") return <Badge variant="success">제출완료</Badge>;
-  return <Badge variant="warning">임시저장</Badge>;
+export function SubmitStatusBadge({
+  status,
+  className,
+}: {
+  status: SubmitStatus;
+  className?: string;
+}) {
+  if (status === "submitted") {
+    return (
+      <Badge variant="success" className={className}>
+        제출완료
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="warning" className={className}>
+      임시저장
+    </Badge>
+  );
 }
 
 export function NotSubmittedBadge() {

@@ -394,6 +394,7 @@ export default function ReportsPage() {
 
   const [writeOpen, setWriteOpen] = useState(false);
   const [writeWeekKey, setWriteWeekKey] = useState(currentWeekKey);
+  const [writeFormKey, setWriteFormKey] = useState<string | null>(null);
   const [editReport, setEditReport] = useState<WeeklyReport | null>(null);
   const [detailReport, setDetailReport] = useState<WeeklyReport | null>(null);
   const [historyPage, setHistoryPage] = useState(1);
@@ -402,9 +403,10 @@ export default function ReportsPage() {
   const isMember = user?.role === "member";
   const isTeamLeader = user?.role === "team_leader";
 
-  const loadReports = useCallback(async () => {
+  const loadReports = useCallback(async (options?: { silent?: boolean }) => {
     if (!user) return;
-    setLoading(true);
+    const silent = options?.silent ?? false;
+    if (!silent) setLoading(true);
     try {
       let effectiveWeekKey = weekKey || undefined;
       let effectiveTeamId = teamId || undefined;
@@ -450,7 +452,7 @@ export default function ReportsPage() {
     } catch {
       setReports([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [user, weekKey, teamId, userId]);
 
@@ -537,7 +539,14 @@ export default function ReportsPage() {
   const openWriteModal = (targetWeekKey = currentWeekKey, report: WeeklyReport | null = null) => {
     setWriteWeekKey(targetWeekKey);
     setEditReport(report);
+    setWriteFormKey(report?.id ?? `new-${targetWeekKey}-${Date.now()}`);
     setWriteOpen(true);
+  };
+
+  const closeWriteModal = () => {
+    setWriteOpen(false);
+    setEditReport(null);
+    setWriteFormKey(null);
   };
 
   const handleMemberWeekSelect = (targetWeekKey: string, report: WeeklyReport | null) => {
@@ -549,7 +558,7 @@ export default function ReportsPage() {
   };
 
   const handleSaved = () => {
-    loadReports();
+    loadReports({ silent: true });
   };
 
   const handleEditFromDetail = () => {
@@ -781,28 +790,25 @@ export default function ReportsPage() {
 
       <Modal
         open={writeOpen}
-        onClose={() => {
-          setWriteOpen(false);
-          setEditReport(null);
-        }}
+        onClose={closeWriteModal}
         title={editReport ? "주간보고 수정" : "주간보고 작성"}
         size="full"
         bodyClassName="flex overflow-hidden p-0"
       >
-        <WeeklyReportForm
-          key={editReport?.id ?? `new-${writeWeekKey}`}
-          initialWeekKey={editReport?.weekKey ?? writeWeekKey}
-          initialReport={editReport}
-          lockWeek={!!editReport}
-          onSaved={() => {
-            handleSaved();
-          }}
-          onCancel={() => {
-            setWriteOpen(false);
-            setEditReport(null);
-          }}
-          showHeader
-        />
+        {writeFormKey && (
+          <WeeklyReportForm
+            key={writeFormKey}
+            initialWeekKey={editReport?.weekKey ?? writeWeekKey}
+            initialReport={editReport}
+            lockWeek={!!editReport}
+            onSaved={(saved) => {
+              setEditReport(saved);
+              handleSaved();
+            }}
+            onCancel={closeWriteModal}
+            showHeader
+          />
+        )}
       </Modal>
 
       <Modal open={!!detailReport} onClose={() => setDetailReport(null)} title="보고서 상세" size="xl">

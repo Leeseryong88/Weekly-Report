@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   addDays,
@@ -17,19 +17,28 @@ import {
   startOfWeek,
   subMonths,
 } from "date-fns";
-import { Check, ChevronLeft, ChevronRight, PenLine, RefreshCw } from "lucide-react";
+import { CalendarCheck, Check, ChevronLeft, ChevronRight, PenLine, RefreshCw } from "lucide-react";
 import { RoleGuard } from "@/components/layout/RoleGuard";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { Modal } from "@/components/ui/Modal";
+import { SubmitStatusBadge } from "@/components/ui/StatusBadge";
+import { ReportDetailView } from "@/components/reports/ReportDetailView";
 import { WeeklyReportPreviewCard } from "@/components/reports/WeeklyReportPreviewCard";
 import { WeeklyReportForm } from "@/components/reports/WeeklyReportForm";
 import { useAuth } from "@/contexts/AuthContext";
-import { getTeam, getUsersByTeam, getWeeklyReportsByUsersAndWeek } from "@/lib/firestore/services";
+import {
+  deleteWeeklyReport,
+  getTeam,
+  getUsersByTeam,
+  getWeeklyReportsByUser,
+  getWeeklyReportsByUsersAndWeek,
+} from "@/lib/firestore/services";
 import { cn } from "@/lib/utils";
-import { getWeekKey } from "@/lib/week-key";
-import type { Team, User, WeeklyReport } from "@/types";
+import { getWeekKey, getWeekLabel } from "@/lib/week-key";
+import type { ReportTaskStatus, Team, User, WeeklyReport } from "@/types";
 
 const WEEKDAY_LABELS = ["토", "일", "월", "화", "수", "목", "금"];
 
@@ -43,10 +52,44 @@ function getMonthWeekKeys(month: Date) {
   return { days, weekKeys: Array.from(keys) };
 }
 
+function getReportTaskStatusCounts(report: WeeklyReport): Record<ReportTaskStatus, number> {
+  const items = [
+    ...(report.weeklyWorkItems ?? []),
+    ...(report.thisWeekWorkItems ?? []),
+    ...(report.nextWeekPlanItems ?? []),
+    ...(report.requestItems ?? []),
+    ...(report.specialNoteItems ?? []),
+  ];
+
+  return items.reduce<Record<ReportTaskStatus, number>>(
+    (counts, item) => {
+      if (item.content.trim()) counts[item.status] += 1;
+      return counts;
+    },
+    { in_progress: 0, completed: 0, delayed: 0 }
+  );
+}
+
+function TaskStatusCountBadges({ report }: { report: WeeklyReport }) {
+  const counts = getReportTaskStatusCounts(report);
+  return (
+    <div className="flex shrink-0 flex-nowrap items-center gap-1">
+      <span className="whitespace-nowrap rounded-full bg-blue-50 px-1.5 py-0 text-[10px] font-semibold leading-5 text-blue-700">
+        진행 {counts.in_progress}
+      </span>
+      <span className="whitespace-nowrap rounded-full bg-green-50 px-1.5 py-0 text-[10px] font-semibold leading-5 text-green-700">
+        완료 {counts.completed}
+      </span>
+      <span className="whitespace-nowrap rounded-full bg-red-50 px-1.5 py-0 text-[10px] font-semibold leading-5 text-red-700">
+        지연 {counts.delayed}
+      </span>
+    </div>
+  );
+}
+
 function TeamSubmissionCalendar({
   visibleMonth,
   selectedWeekKey,
-  members,
   submitterCount,
   reportsByWeek,
   onSelectWeek,
@@ -54,7 +97,6 @@ function TeamSubmissionCalendar({
 }: {
   visibleMonth: Date;
   selectedWeekKey: string;
-  members: User[];
   submitterCount: number;
   reportsByWeek: Map<string, WeeklyReport[]>;
   onSelectWeek: (weekKey: string) => void;
@@ -62,6 +104,9 @@ function TeamSubmissionCalendar({
 }) {
   const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
   const { days } = useMemo(() => getMonthWeekKeys(visibleMonth), [visibleMonth]);
+  const weeks = Array.from({ length: Math.ceil(days.length / 7) }, (_, index) =>
+    days.slice(index * 7, index * 7 + 7)
+  );
   const selectedWeekStart = parseISO(selectedWeekKey);
   const selectedReports = reportsByWeek.get(selectedWeekKey) ?? [];
   const submittedCount = selectedReports.length;
@@ -70,8 +115,8 @@ function TeamSubmissionCalendar({
   const today = new Date();
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="rounded-lg border border-slate-200 bg-white p-2.5">
+      <div className="mb-2 flex items-center justify-between">
         <button
           type="button"
           onClick={() => onMonthChange(subMonths(visibleMonth, 1))}
@@ -93,53 +138,91 @@ function TeamSubmissionCalendar({
 
       <div className="grid grid-cols-7 gap-0.5 text-center text-[11px] font-medium text-slate-500">
         {WEEKDAY_LABELS.map((label) => (
-          <span key={label} className="py-1">
+          <span key={label} className="py-0.5">
             {label}
           </span>
         ))}
       </div>
 
-      <div className="mt-1 grid grid-cols-7 gap-0.5" onMouseLeave={() => setHoveredDate(null)}>
-        {days.map((day) => {
-          const dayWeekKey = getWeekKey(day);
-          const inCurrentMonth = isSameMonth(day, visibleMonth);
+      <div
+        className="mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white"
+        onMouseLeave={() => setHoveredDate(null)}
+      >
+        {weeks.map((week) => {
+          const weekStart = week[0];
+          const weekKey = getWeekKey(weekStart);
+          const weekReports = reportsByWeek.get(weekKey) ?? [];
+          const weekSubmittedCount = weekReports.length;
+          const weekCompleted = totalCount > 0 && weekSubmittedCount === totalCount;
+          const weekPartial = weekSubmittedCount > 0 && !weekCompleted;
           const isHoveredWeek = hoveredDate
-            ? isSameWeek(day, hoveredDate, { weekStartsOn: 6 })
+            ? isSameWeek(weekStart, hoveredDate, { weekStartsOn: 6 })
             : false;
-          const isSelectedWeek = isSameWeek(day, selectedWeekStart, { weekStartsOn: 6 });
-          const isWeekStart = day.getDay() === 6;
-          const isWeekEnd = day.getDay() === 5;
+          const isSelectedWeek = isSameWeek(weekStart, selectedWeekStart, { weekStartsOn: 6 });
+          const barLabel =
+            totalCount === 0
+              ? "제출 대상 없음"
+              : weekSubmittedCount > 0
+                ? `${weekSubmittedCount}/${totalCount} 제출`
+                : "제출 없음";
 
           return (
-            <button
-              key={format(day, "yyyy-MM-dd")}
-              type="button"
-              onMouseEnter={() => setHoveredDate(day)}
-              onFocus={() => setHoveredDate(day)}
-              onClick={() => onSelectWeek(dayWeekKey)}
-              className={cn(
-                "h-8 text-xs transition-colors",
-                isWeekStart && "rounded-l-full",
-                isWeekEnd && "rounded-r-full",
-                !inCurrentMonth && "text-slate-300",
-                inCurrentMonth && "text-slate-700",
-                isHoveredWeek && !isSelectedWeek && "bg-slate-200",
-                isSelectedWeek && "bg-blue-100 font-semibold text-blue-800",
-                isSameDay(day, selectedWeekStart) && "rounded-l-full",
-                isSameDay(day, addDays(selectedWeekStart, 6)) &&
-                  "rounded-r-full bg-blue-600 text-white",
-                isSameDay(day, today) && !isSelectedWeek && "font-semibold text-blue-600"
-              )}
+            <div
+              key={weekKey}
+              className="relative grid grid-cols-7 border-b border-slate-100 last:border-b-0"
             >
-              {format(day, "d")}
-            </button>
+              <div
+                className={cn(
+                  "pointer-events-none absolute left-1 right-1 top-6 z-10 flex h-5 items-center justify-center rounded-full text-[10px] font-semibold shadow-sm",
+                  weekCompleted && "bg-green-100 text-green-700",
+                  weekPartial && "bg-amber-100 text-amber-700",
+                  !weekCompleted && !weekPartial && "bg-slate-100 text-slate-500",
+                  isSelectedWeek && "ring-2 ring-blue-200"
+                )}
+              >
+                {barLabel}
+              </div>
+
+              {week.map((day) => {
+                const dayWeekKey = getWeekKey(day);
+                const inCurrentMonth = isSameMonth(day, visibleMonth);
+
+                return (
+                  <button
+                    key={format(day, "yyyy-MM-dd")}
+                    type="button"
+                    onMouseEnter={() => setHoveredDate(day)}
+                    onFocus={() => setHoveredDate(day)}
+                    onClick={() => onSelectWeek(dayWeekKey)}
+                    className={cn(
+                      "relative min-h-11 border-r border-slate-100 p-1 text-left text-xs transition-colors last:border-r-0",
+                      !inCurrentMonth && "bg-slate-50 text-slate-300",
+                      inCurrentMonth && "bg-white text-slate-700",
+                      isHoveredWeek && !isSelectedWeek && "bg-slate-100",
+                      isSelectedWeek && "bg-blue-50",
+                      weekCompleted && !isSelectedWeek && "bg-green-50 hover:bg-green-100",
+                      weekPartial && !isSelectedWeek && "bg-amber-50 hover:bg-amber-100"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold leading-none",
+                        isSameDay(day, today) ? "bg-blue-600 text-white" : "text-slate-700"
+                      )}
+                    >
+                      {format(day, "d")}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           );
         })}
       </div>
 
       <div
         className={cn(
-          "mt-3 rounded-lg px-3 py-2 text-sm font-semibold",
+          "mt-2 rounded-lg px-3 py-1.5 text-xs font-semibold",
           completed && "bg-green-50 text-green-700",
           !completed && submittedCount > 0 && "bg-amber-50 text-amber-700",
           submittedCount === 0 && "bg-slate-50 text-slate-500"
@@ -147,6 +230,79 @@ function TeamSubmissionCalendar({
       >
         {format(selectedWeekStart, "M/d")} - {format(addDays(selectedWeekStart, 6), "M/d")} ·{" "}
         {submittedCount}/{totalCount} 제출
+      </div>
+    </div>
+  );
+}
+
+function SelectedWeekReportList({
+  reports,
+  authorNames,
+  currentUserId,
+  selectedWeekKey,
+  onSelectReport,
+}: {
+  reports: WeeklyReport[];
+  authorNames: Record<string, string>;
+  currentUserId: string;
+  selectedWeekKey: string;
+  onSelectReport: (report: WeeklyReport) => void;
+}) {
+  return (
+    <div className="flex min-h-[18rem] flex-col rounded-lg border border-slate-200 bg-white">
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">지난 주간보고</p>
+          <p className="text-xs text-slate-500">{getWeekLabel(selectedWeekKey)}</p>
+        </div>
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+          {reports.length}건
+        </span>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        {reports.length === 0 ? (
+          <EmptyState
+            title="보고서가 없습니다"
+            description="선택한 주차에 표시할 보고서가 없습니다."
+          />
+        ) : (
+          <div className="space-y-2">
+            {reports.map((report) => {
+              const isMine = report.userId === currentUserId;
+
+              return (
+                <button
+                  key={report.id}
+                  type="button"
+                  onClick={() => onSelectReport(report)}
+                  className={cn(
+                    "flex w-full flex-nowrap items-center gap-1.5 rounded-lg border bg-white px-2 py-2 text-left transition-colors",
+                    isMine
+                      ? "border-blue-400 bg-blue-50/40 hover:border-blue-500"
+                      : "border-slate-200 hover:border-blue-200 hover:bg-blue-50/30"
+                  )}
+                >
+                  <CalendarCheck className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                  <span className="min-w-0 max-w-28 truncate text-xs font-medium text-slate-900">
+                    {authorNames[report.userId] ?? report.userId}
+                  </span>
+                  {isMine && (
+                    <span className="shrink-0 rounded-full bg-blue-600 px-1.5 py-0 text-[10px] font-semibold leading-5 text-white">
+                      보고취합
+                    </span>
+                  )}
+                  <SubmitStatusBadge
+                    status={report.submitStatus}
+                    className="shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px] leading-5"
+                  />
+                  <span className="min-w-1 flex-1" aria-hidden />
+                  <TaskStatusCountBadges report={report} />
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -180,7 +336,7 @@ function TeamOrgChart({
   refreshing: boolean;
 }) {
   return (
-    <div className="relative flex min-h-full items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-4 pb-4 pt-12 sm:pt-4">
+    <div className="relative flex min-h-full min-w-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-4 pb-4 pt-12 sm:pt-4">
       <Button
         type="button"
         size="sm"
@@ -199,7 +355,7 @@ function TeamOrgChart({
           onClick={onToggleLeader}
           disabled={!leaderId}
           className={cn(
-            "inline-flex max-w-full items-center gap-2 rounded-full border bg-white px-3 py-2 text-sm shadow-sm transition-colors [&>p]:hidden [&>span:nth-of-type(5)]:hidden [&>span:nth-of-type(6)]:hidden",
+            "inline-flex max-w-full items-center gap-2 rounded-full border bg-white px-3 py-2 text-sm shadow-sm transition-colors",
             leaderId && selectedMembers.has(leaderId)
               ? "border-blue-300 bg-blue-50 ring-2 ring-blue-100"
               : "border-blue-200 hover:border-blue-300 hover:bg-white",
@@ -222,9 +378,6 @@ function TeamOrgChart({
           </span>
           <span className="h-4 w-px shrink-0 bg-slate-200" />
           <span className="shrink-0 font-semibold text-slate-900">팀장({leaderName})</span>
-          <span className="shrink-0 font-semibold text-slate-900">팀장({leaderName})</span>
-          <span className="shrink-0 font-semibold text-slate-900">팀장({leaderName})</span>
-          <p className="mt-1 text-base font-bold text-slate-900">팀장({leaderName})</p>
         </button>
 
         {members.length > 0 && (
@@ -292,20 +445,34 @@ function TeamConsolidateContent() {
   const [teamLeader, setTeamLeader] = useState<User | null>(null);
   const [members, setMembers] = useState<User[]>([]);
   const [reportsByWeek, setReportsByWeek] = useState<Map<string, WeeklyReport[]>>(new Map());
+  const [leaderReports, setLeaderReports] = useState<WeeklyReport[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   const [writeOpen, setWriteOpen] = useState(false);
+  const [writeWeekKey, setWriteWeekKey] = useState(initialWeekKey);
+  const [writeFormKey, setWriteFormKey] = useState<string | null>(null);
+  const [editReport, setEditReport] = useState<WeeklyReport | null>(null);
+  const [detailReport, setDetailReport] = useState<WeeklyReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadData = useCallback(async (options?: { silent?: boolean }) => {
+  const hasLoadedDataRef = useRef(false);
+
+  const loadData = useCallback(async (options?: {
+    silent?: boolean;
+    showRefreshIndicator?: boolean;
+  }) => {
     const silent = options?.silent ?? false;
+    const showRefreshIndicator = options?.showRefreshIndicator ?? false;
     if (!user?.teamId) {
       setLoading(false);
       return;
     }
 
-    if (silent) setRefreshing(true);
-    else setLoading(true);
+    if (silent) {
+      if (showRefreshIndicator) setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
 
     try {
       const { weekKeys } = getMonthWeekKeys(visibleMonth);
@@ -320,11 +487,14 @@ function TeamConsolidateContent() {
         (user.role === "team_leader" ? user : null);
       const memberIds = memberList.map((member) => member.id);
       const reportUserIds = leader ? Array.from(new Set([leader.id, ...memberIds])) : memberIds;
-      const weeklyReportGroups = await Promise.all(
-        weekKeys.map((targetWeekKey) =>
-          getWeeklyReportsByUsersAndWeek(reportUserIds, targetWeekKey)
-        )
-      );
+      const [weeklyReportGroups, leaderReportHistory] = await Promise.all([
+        Promise.all(
+          weekKeys.map((targetWeekKey) =>
+            getWeeklyReportsByUsersAndWeek(reportUserIds, targetWeekKey)
+          )
+        ),
+        leader ? getWeeklyReportsByUser(leader.id) : Promise.resolve([]),
+      ]);
       const nextReportsByWeek = new Map<string, WeeklyReport[]>();
       weekKeys.forEach((targetWeekKey, index) => {
         nextReportsByWeek.set(
@@ -337,14 +507,23 @@ function TeamConsolidateContent() {
       setTeamLeader(leader);
       setMembers(memberList);
       setReportsByWeek(nextReportsByWeek);
+      setLeaderReports(
+        leaderReportHistory
+          .filter((report) => weekKeys.includes(report.weekKey))
+          .sort((a, b) => b.weekKey.localeCompare(a.weekKey))
+      );
     } finally {
-      if (silent) setRefreshing(false);
-      else setLoading(false);
+      hasLoadedDataRef.current = true;
+      if (silent) {
+        if (showRefreshIndicator) setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
   }, [user, visibleMonth]);
 
   useEffect(() => {
-    loadData();
+    loadData({ silent: hasLoadedDataRef.current });
   }, [loadData]);
 
   if (loading) return <LoadingSpinner size="lg" />;
@@ -363,6 +542,46 @@ function TeamConsolidateContent() {
     ? selectedReports.find((report) => report.userId === teamLeader.id) ?? null
     : null;
   const totalSubmitters = members.length + (teamLeader ? 1 : 0);
+  const reportUserOrder = new Map(reportUsers.map((member, index) => [member.id, index]));
+  const selectedReportIds = new Set(selectedReports.map((report) => report.id));
+  const selectedWeekOwnReports = leaderReports.filter(
+    (report) => report.weekKey === selectedWeekKey && report.userId === user.id
+  );
+  const selectedWeekPanelReports = [
+    ...selectedReports,
+    ...selectedWeekOwnReports.filter((report) => !selectedReportIds.has(report.id)),
+  ].sort(
+    (a, b) =>
+      (reportUserOrder.get(a.userId) ?? Number.MAX_SAFE_INTEGER) -
+      (reportUserOrder.get(b.userId) ?? Number.MAX_SAFE_INTEGER)
+  );
+  const canManageOwnReport = Boolean(detailReport && user && detailReport.userId === user.id);
+
+  const openWriteModal = (targetWeekKey = selectedWeekKey, report: WeeklyReport | null = null) => {
+    setWriteWeekKey(targetWeekKey);
+    setEditReport(report);
+    setWriteFormKey(report?.id ?? `team-write-${targetWeekKey}-${Date.now()}`);
+    setWriteOpen(true);
+  };
+
+  const closeWriteModal = () => {
+    setWriteOpen(false);
+    setEditReport(null);
+    setWriteFormKey(null);
+  };
+
+  const handleEditFromDetail = () => {
+    if (!detailReport) return;
+    openWriteModal(detailReport.weekKey, detailReport);
+    setDetailReport(null);
+  };
+
+  const handleDeleteReport = async () => {
+    if (!detailReport) return;
+    await deleteWeeklyReport(detailReport.id, detailReport.fileUrls);
+    setDetailReport(null);
+    await loadData({ silent: true });
+  };
 
   const toggleSelectedMember = (memberId: string) => {
     setSelectedMembers((prev) => {
@@ -382,7 +601,7 @@ function TeamConsolidateContent() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-2xl font-bold text-slate-900">팀원 제출 현황</h2>
-        <Button type="button" onClick={() => setWriteOpen(true)}>
+        <Button type="button" onClick={() => openWriteModal(selectedWeekKey)}>
           <PenLine className="h-4 w-4" />
           주간보고 작성
         </Button>
@@ -391,24 +610,28 @@ function TeamConsolidateContent() {
       <Card
         title="선택 주차 제출 현황"
         action={
-          <div className="relative text-sm font-medium text-transparent">
-            <span className="absolute inset-0 text-slate-500">
-              {selectedReports.length}/{totalSubmitters} 제출
-            </span>
-            {selectedReports.length}/{members.length} 제출
+          <div className="text-sm font-medium text-slate-500">
+            {selectedReports.length}/{totalSubmitters} 제출
           </div>
         }
       >
         <div className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-[18rem_minmax(0,1fr)]">
+          <div className="grid gap-4 xl:grid-cols-[20rem_27rem_minmax(0,1fr)]">
             <TeamSubmissionCalendar
               visibleMonth={visibleMonth}
               selectedWeekKey={selectedWeekKey}
-              members={members}
               submitterCount={totalSubmitters}
               reportsByWeek={reportsByWeek}
               onSelectWeek={setSelectedWeekKey}
               onMonthChange={setVisibleMonth}
+            />
+
+            <SelectedWeekReportList
+              reports={selectedWeekPanelReports}
+              authorNames={memberNames}
+              currentUserId={user.id}
+              selectedWeekKey={selectedWeekKey}
+              onSelectReport={setDetailReport}
             />
 
             <TeamOrgChart
@@ -422,7 +645,7 @@ function TeamConsolidateContent() {
               selectedMembers={selectedMembers}
               onToggleLeader={toggleSelectedLeader}
               onToggleMember={toggleSelectedMember}
-              onRefresh={() => void loadData({ silent: true })}
+              onRefresh={() => void loadData({ silent: true, showRefreshIndicator: true })}
               refreshing={refreshing}
             />
           </div>
@@ -467,20 +690,38 @@ function TeamConsolidateContent() {
 
       <Modal
         open={writeOpen}
-        onClose={() => setWriteOpen(false)}
-        title="주간보고 작성"
+        onClose={closeWriteModal}
+        title={editReport ? "주간보고 수정" : "주간보고 작성"}
         size="full"
         bodyClassName="flex overflow-hidden p-0"
       >
-        <WeeklyReportForm
-          key={`team-write-${selectedWeekKey}`}
-          initialWeekKey={selectedWeekKey}
-          onSaved={() => {
-            loadData();
-          }}
-          onCancel={() => setWriteOpen(false)}
-          showHeader
-        />
+        {writeFormKey && (
+          <WeeklyReportForm
+            key={writeFormKey}
+            initialWeekKey={editReport?.weekKey ?? writeWeekKey}
+            initialReport={editReport}
+            lockWeek={!!editReport}
+            onSaved={(saved) => {
+              setEditReport(saved);
+              loadData({ silent: true });
+            }}
+            onCancel={closeWriteModal}
+            showHeader
+          />
+        )}
+      </Modal>
+
+      <Modal open={!!detailReport} onClose={() => setDetailReport(null)} title="보고서 상세" size="xl">
+        {detailReport && (
+          <ReportDetailView
+            report={detailReport}
+            authorName={memberNames[detailReport.userId] ?? detailReport.userId}
+            teamName={team?.name ?? detailReport.teamId}
+            canManage={canManageOwnReport}
+            onEdit={canManageOwnReport ? handleEditFromDetail : undefined}
+            onDelete={canManageOwnReport ? handleDeleteReport : undefined}
+          />
+        )}
       </Modal>
     </div>
   );

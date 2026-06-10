@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   addDays,
   addMonths,
@@ -348,9 +348,14 @@ export function WeeklyReportForm({
   const [selectedMemberReportItemId, setSelectedMemberReportItemId] = useState<string | null>(null);
   const [showDecisionSection, setShowDecisionSection] = useState(false);
   const [showSpecialNoteSection, setShowSpecialNoteSection] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const hasLoadedOnceRef = useRef(false);
+  const loadedInitialReportIdRef = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  const initialReportId = initialReport?.id ?? null;
+  const initialReportWeekKey = initialReport?.weekKey ?? null;
 
   useEffect(() => {
     if (!user) return;
@@ -377,24 +382,41 @@ export function WeeklyReportForm({
     };
 
     if (initialReport && initialReport.weekKey === selectedWeekKey) {
-      loadFromReport(initialReport);
-      setLoading(false);
+      if (loadedInitialReportIdRef.current !== initialReport.id) {
+        loadFromReport(initialReport);
+        loadedInitialReportIdRef.current = initialReport.id;
+      }
+      setInitialLoading(false);
+      hasLoadedOnceRef.current = true;
       return;
     }
 
+    loadedInitialReportIdRef.current = null;
+
     let cancelled = false;
     (async () => {
-      setLoading(true);
+      if (!hasLoadedOnceRef.current) {
+        setInitialLoading(true);
+      }
       const r = await getWeeklyReport(user.id, selectedWeekKey);
       if (cancelled) return;
       loadFromReport(r);
-      setLoading(false);
+      setInitialLoading(false);
+      hasLoadedOnceRef.current = true;
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [user, selectedWeekKey, initialReport]);
+  }, [
+    user?.id,
+    user?.role,
+    user?.name,
+    user?.teamId,
+    selectedWeekKey,
+    initialReportId,
+    initialReportWeekKey,
+  ]);
 
   useEffect(() => {
     if (!user?.teamId || user.role !== "team_leader") {
@@ -440,7 +462,7 @@ export function WeeklyReportForm({
   const weekStart = parseISO(selectedWeekKey);
   const weekEnd = addDays(weekStart, 6);
 
-  if (loading) return <LoadingSpinner />;
+  if (initialLoading) return <LoadingSpinner />;
   if (!user?.teamId) {
     return <p className="text-slate-500">소속 팀이 없습니다. 관리자에게 문의하세요.</p>;
   }
@@ -552,8 +574,9 @@ export function WeeklyReportForm({
         fileUrls,
       } as WeeklyReport;
       setReport(saved);
+      loadedInitialReportIdRef.current = id;
       setMessage(submitStatus === "submitted" ? "보고서를 제출했습니다." : "임시저장했습니다.");
-      onSaved?.(saved);
+      queueMicrotask(() => onSaved?.(saved));
     } catch {
       setMessage("저장에 실패했습니다.");
     } finally {
