@@ -386,16 +386,17 @@ function WeeklySummaryContent() {
   const sectionCounts = useMemo(() => {
     return SUMMARY_TABS.reduce<Record<SummarySectionKey, number>>(
       (counts, tab) => {
-        if (tab.key === "deptHeadDirectives") {
-          counts[tab.key] = 0;
+        const sectionKey = tab.key;
+        if (sectionKey === "deptHeadDirectives") {
+          counts.deptHeadDirectives = 0;
           return counts;
         }
 
         const targetSummaries =
-          tab.key === "weeklyWorkItems" ? selectedWeeklySummaries : summaries;
+          sectionKey === "weeklyWorkItems" ? selectedWeeklySummaries : summaries;
 
-        counts[tab.key] = targetSummaries.reduce(
-          (total, summary) => total + summary.itemsBySection[tab.key].length,
+        counts[sectionKey] = targetSummaries.reduce(
+          (total, summary) => total + summary.itemsBySection[sectionKey].length,
           0
         );
         return counts;
