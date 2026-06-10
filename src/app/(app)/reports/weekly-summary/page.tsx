@@ -32,7 +32,6 @@ import {
 import {
   getReportSections,
   isImportantTaskItem,
-  REPORT_SECTIONS,
   type ReportSectionKey,
 } from "@/lib/report-items";
 import { cn } from "@/lib/utils";
@@ -44,8 +43,17 @@ const MAX_VISIBLE_ITEMS = 7;
 // 항목 1개 높이(패딩·본문 1줄) + space-y-1 간격 기준으로 7개 분량 높이
 const SCROLL_LIST_MAX_HEIGHT = "calc(7 * 2.75rem + 6 * 0.25rem)";
 
+type SummarySectionKey = ReportSectionKey | "deptHeadDirectives";
+
+const SUMMARY_TABS: { key: SummarySectionKey; label: string }[] = [
+  { key: "weeklyWorkItems", label: "주간업무" },
+  { key: "requestItems", label: "의사결정요청" },
+  { key: "deptHeadDirectives", label: "부서장 지시" },
+  { key: "specialNoteItems", label: "특이사항" },
+];
+
 const SECTION_STYLES: Record<
-  ReportSectionKey,
+  SummarySectionKey,
   { active: string; count: string; border: string }
 > = {
   weeklyWorkItems: {
@@ -57,6 +65,11 @@ const SECTION_STYLES: Record<
     active: "border-blue-600 bg-blue-600 text-white",
     count: "bg-blue-50 text-blue-700",
     border: "border-blue-100",
+  },
+  deptHeadDirectives: {
+    active: "border-amber-600 bg-amber-600 text-white",
+    count: "bg-amber-50 text-amber-700",
+    border: "border-amber-100",
   },
   specialNoteItems: {
     active: "border-violet-600 bg-violet-600 text-white",
@@ -208,9 +221,10 @@ function TeamSummaryCard({
   activeSection,
 }: {
   summary: TeamWeeklySummary;
-  activeSection: ReportSectionKey;
+  activeSection: SummarySectionKey;
 }) {
-  const items = summary.itemsBySection[activeSection];
+  const items =
+    activeSection === "deptHeadDirectives" ? [] : summary.itemsBySection[activeSection];
   const styles = SECTION_STYLES[activeSection];
   const showStatus = activeSection === "weeklyWorkItems";
   const listRef = useRef<HTMLUListElement>(null);
@@ -293,7 +307,7 @@ function TeamSummaryCard({
 function WeeklySummaryContent() {
   const { user } = useAuth();
   const [selectedWeekKey, setSelectedWeekKey] = useState(getCurrentWeekKey());
-  const [activeSection, setActiveSection] = useState<ReportSectionKey>("weeklyWorkItems");
+  const [activeSection, setActiveSection] = useState<SummarySectionKey>("weeklyWorkItems");
   const [summaries, setSummaries] = useState<TeamWeeklySummary[]>([]);
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -370,18 +384,23 @@ function WeeklySummaryContent() {
   );
 
   const sectionCounts = useMemo(() => {
-    return REPORT_SECTIONS.reduce<Record<ReportSectionKey, number>>(
-      (counts, section) => {
-        const targetSummaries =
-          section.key === "weeklyWorkItems" ? selectedWeeklySummaries : summaries;
+    return SUMMARY_TABS.reduce<Record<SummarySectionKey, number>>(
+      (counts, tab) => {
+        if (tab.key === "deptHeadDirectives") {
+          counts[tab.key] = 0;
+          return counts;
+        }
 
-        counts[section.key] = targetSummaries.reduce(
-          (total, summary) => total + summary.itemsBySection[section.key].length,
+        const targetSummaries =
+          tab.key === "weeklyWorkItems" ? selectedWeeklySummaries : summaries;
+
+        counts[tab.key] = targetSummaries.reduce(
+          (total, summary) => total + summary.itemsBySection[tab.key].length,
           0
         );
         return counts;
       },
-      { weeklyWorkItems: 0, requestItems: 0, specialNoteItems: 0 }
+      { weeklyWorkItems: 0, requestItems: 0, deptHeadDirectives: 0, specialNoteItems: 0 }
     );
   }, [selectedWeeklySummaries, summaries]);
 
@@ -424,28 +443,28 @@ function WeeklySummaryContent() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {REPORT_SECTIONS.map((section) => {
-                const active = activeSection === section.key;
+              {SUMMARY_TABS.map((tab) => {
+                const active = activeSection === tab.key;
                 return (
                   <button
-                    key={section.key}
+                    key={tab.key}
                     type="button"
-                    onClick={() => setActiveSection(section.key)}
+                    onClick={() => setActiveSection(tab.key)}
                     className={cn(
                       "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-semibold transition-colors",
                       active
-                        ? SECTION_STYLES[section.key].active
+                        ? SECTION_STYLES[tab.key].active
                         : "border-slate-200 text-slate-600 hover:bg-slate-50"
                     )}
                   >
-                    {section.label}
+                    {tab.label}
                     <span
                       className={cn(
                         "rounded-full px-2 py-0.5 text-[11px]",
-                        active ? "bg-white/20 text-white" : SECTION_STYLES[section.key].count
+                        active ? "bg-white/20 text-white" : SECTION_STYLES[tab.key].count
                       )}
                     >
-                      {sectionCounts[section.key]}
+                      {sectionCounts[tab.key]}
                     </span>
                   </button>
                 );
