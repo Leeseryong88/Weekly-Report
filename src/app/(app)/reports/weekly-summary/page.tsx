@@ -30,7 +30,6 @@ import {
 import {
   getReportSections,
   isImportantTaskItem,
-  sortReportItems,
   type ReportSectionKey,
 } from "@/lib/report-items";
 import { cn } from "@/lib/utils";
@@ -210,28 +209,13 @@ function getStarredSections(report: WeeklyReport | null): StarredSections {
     requestItems: sections.requestItems.filter(
       (item) => item.content.trim() && isImportantTaskItem(item)
     ),
-    deptHeadDirectiveItems: sections.deptHeadDirectiveItems.filter((item) =>
-      item.content.trim()
+    deptHeadDirectiveItems: sections.deptHeadDirectiveItems.filter(
+      (item) => item.content.trim() && isImportantTaskItem(item)
     ),
     specialNoteItems: sections.specialNoteItems.filter(
       (item) => item.content.trim() && isImportantTaskItem(item)
     ),
   };
-}
-
-function getDeptHeadDirectiveItems(report: WeeklyReport, authorName: string): ReportTaskItem[] {
-  const sections = getReportSections(report);
-  return sections.deptHeadDirectiveItems
-    .filter((item) => item.content.trim())
-    .map((item) =>
-      item.assigneeName?.trim()
-        ? item
-        : {
-            ...item,
-            assigneeUserId: item.assigneeUserId ?? report.userId,
-            assigneeName: authorName,
-          }
-    );
 }
 
 function TeamSummaryCard({
@@ -339,7 +323,7 @@ function WeeklySummaryContent() {
       try {
         const [teams, users] = await Promise.all([
           getAllTeams(),
-          getUsersByRoles(["member", "team_leader", "admin"]),
+          getUsersByRoles(["team_leader", "admin"]),
         ]);
 
         const sortedTeams = [...teams].sort((a, b) => a.name.localeCompare(b.name, "ko"));
@@ -347,30 +331,11 @@ function WeeklySummaryContent() {
         const leaderIds = Array.from(
           new Set(teamLeaders.map((leader) => leader?.id).filter((id): id is string => Boolean(id)))
         );
-        const teamIds = new Set(sortedTeams.map((team) => team.id));
-        const reportUserIds = Array.from(
-          new Set(
-            users
-              .filter(
-                (candidate) =>
-                  (candidate.teamId !== null && teamIds.has(candidate.teamId)) ||
-                  leaderIds.includes(candidate.id)
-              )
-              .map((candidate) => candidate.id)
-          )
-        );
         const reports = await getSubmittedWeeklyReportsByUsersAndWeek(
-          reportUserIds,
+          leaderIds,
           selectedWeekKey
         );
         const reportByUserId = new Map(reports.map((report) => [report.userId, report]));
-        const userById = new Map(users.map((reportUser) => [reportUser.id, reportUser]));
-        const reportsByTeamId = new Map<string, WeeklyReport[]>();
-        reports.forEach((report) => {
-          const teamReports = reportsByTeamId.get(report.teamId) ?? [];
-          teamReports.push(report);
-          reportsByTeamId.set(report.teamId, teamReports);
-        });
 
         if (cancelled) return;
 
@@ -378,23 +343,11 @@ function WeeklySummaryContent() {
           sortedTeams.map((team, index) => {
             const leader = teamLeaders[index];
             const report = leader ? reportByUserId.get(leader.id) ?? null : null;
-            const leaderSections = getStarredSections(report);
-            const deptHeadDirectiveItems = sortReportItems(
-              (reportsByTeamId.get(team.id) ?? []).flatMap((teamReport) =>
-                getDeptHeadDirectiveItems(
-                  teamReport,
-                  userById.get(teamReport.userId)?.name ?? teamReport.userId
-                )
-              )
-            );
             return {
               team,
               leader,
               report,
-              itemsBySection: {
-                ...leaderSections,
-                deptHeadDirectiveItems,
-              },
+              itemsBySection: getStarredSections(report),
             };
           })
         );

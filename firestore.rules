@@ -46,7 +46,7 @@ service cloud.firestore {
 
     function isWeeklySummaryUser(userId) {
       return isActiveUserId(userId)
-        && get(/databases/$(database)/documents/users/$(userId)).data.role in ['member', 'team_leader', 'admin'];
+        && get(/databases/$(database)/documents/users/$(userId)).data.role in ['team_leader', 'admin'];
     }
 
     function canReadTeam(teamId) {
@@ -72,7 +72,7 @@ service cloud.firestore {
         (resource.data.isActive == true && (
           isPartLeader() ||
           request.auth.uid == userId ||
-          (isActiveUser() && resource.data.role in ['member', 'team_leader', 'admin']) ||
+          (isActiveUser() && resource.data.role in ['team_leader', 'admin']) ||
           (isTeamLeader() && resource.data.teamId == getUserData().teamId)
         ))
       );
