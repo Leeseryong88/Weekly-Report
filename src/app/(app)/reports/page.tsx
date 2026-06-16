@@ -656,6 +656,7 @@ export default function ReportsPage() {
             report={detailReport}
             authorName={userMap[detailReport.userId] ?? detailReport.userId}
             teamName={teamMap[detailReport.teamId] ?? detailReport.teamId}
+            highlightKeyword={keyword}
             canManage={!!canManageOwnReport}
             onEdit={canManageOwnReport ? handleEditFromDetail : undefined}
             onDelete={canManageOwnReport ? handleDeleteReport : undefined}

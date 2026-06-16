@@ -12,18 +12,51 @@ interface ReportDetailViewProps {
   report: WeeklyReport;
   authorName: string;
   teamName: string;
+  highlightKeyword?: string;
   canManage?: boolean;
   onEdit?: () => void;
   onDelete?: () => Promise<void>;
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function HighlightedText({ text, keyword }: { text: string; keyword?: string }) {
+  const trimmedKeyword = keyword?.trim();
+  if (!trimmedKeyword) return <>{text}</>;
+
+  const matcher = new RegExp(`(${escapeRegExp(trimmedKeyword)})`, "gi");
+  const parts = text.split(matcher);
+  const normalizedKeyword = trimmedKeyword.toLowerCase();
+
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.toLowerCase() === normalizedKeyword ? (
+          <mark
+            key={`${part}-${index}`}
+            className="rounded bg-yellow-200 px-0.5 py-px font-semibold text-slate-950"
+          >
+            {part}
+          </mark>
+        ) : (
+          <span key={`${part}-${index}`}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
 function SectionItemsTable({
   title,
   items,
+  highlightKeyword,
   showStatus = false,
 }: {
   title: string;
   items: ReportTaskItem[];
+  highlightKeyword?: string;
   showStatus?: boolean;
 }) {
   const filled = items.filter((item) => item.content.trim());
@@ -61,7 +94,9 @@ function SectionItemsTable({
                       <TaskStatusBadge status={item.status} />
                     </td>
                   )}
-                  <td className="whitespace-pre-wrap px-3 py-2 text-slate-700">{item.content}</td>
+                  <td className="whitespace-pre-wrap px-3 py-2 text-slate-700">
+                    <HighlightedText text={item.content} keyword={highlightKeyword} />
+                  </td>
                 </tr>
               );
             })}
@@ -76,6 +111,7 @@ export function ReportDetailView({
   report,
   authorName,
   teamName,
+  highlightKeyword,
   canManage,
   onEdit,
   onDelete,
@@ -117,6 +153,7 @@ export function ReportDetailView({
             key={section.key}
             title={section.label}
             items={items}
+            highlightKeyword={highlightKeyword}
             showStatus={section.key === "weeklyWorkItems"}
           />
         );
@@ -145,7 +182,9 @@ export function ReportDetailView({
       {report.teamLeaderComment && (
         <div className="rounded-lg bg-blue-50 p-3 text-sm">
           <p className="font-medium text-blue-800">팀장 코멘트</p>
-          <p className="mt-1 whitespace-pre-wrap text-blue-700">{report.teamLeaderComment}</p>
+          <p className="mt-1 whitespace-pre-wrap text-blue-700">
+            <HighlightedText text={report.teamLeaderComment} keyword={highlightKeyword} />
+          </p>
         </div>
       )}
 
