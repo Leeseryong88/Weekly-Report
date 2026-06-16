@@ -24,14 +24,13 @@ import { SubmitStatusBadge, TaskStatusBadge } from "@/components/ui/StatusBadge"
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getAllTeams,
-  getAllUsers,
-  getTeam,
-  getUsersByTeam,
-  getWeeklyReportsByUsersAndWeek,
+  getSubmittedWeeklyReportsByUsersAndWeek,
+  getUsersByRoles,
 } from "@/lib/firestore/services";
 import {
   getReportSections,
   isImportantTaskItem,
+  sortReportItems,
   type ReportSectionKey,
 } from "@/lib/report-items";
 import { cn } from "@/lib/utils";
@@ -43,12 +42,12 @@ const MAX_VISIBLE_ITEMS = 7;
 // 항목 1개 높이(패딩·본문 1줄) + space-y-1 간격 기준으로 7개 분량 높이
 const SCROLL_LIST_MAX_HEIGHT = "calc(7 * 2.75rem + 6 * 0.25rem)";
 
-type SummarySectionKey = ReportSectionKey | "deptHeadDirectives";
+type SummarySectionKey = ReportSectionKey;
 
 const SUMMARY_TABS: { key: SummarySectionKey; label: string }[] = [
   { key: "weeklyWorkItems", label: "주간업무" },
   { key: "requestItems", label: "의사결정요청" },
-  { key: "deptHeadDirectives", label: "부서장 지시" },
+  { key: "deptHeadDirectiveItems", label: "부서장 지시" },
   { key: "specialNoteItems", label: "특이사항" },
 ];
 
@@ -66,7 +65,7 @@ const SECTION_STYLES: Record<
     count: "bg-blue-50 text-blue-700",
     border: "border-blue-100",
   },
-  deptHeadDirectives: {
+  deptHeadDirectiveItems: {
     active: "border-amber-600 bg-amber-600 text-white",
     count: "bg-amber-50 text-amber-700",
     border: "border-amber-100",
@@ -91,6 +90,7 @@ function emptyStarredSections(): StarredSections {
   return {
     weeklyWorkItems: [],
     requestItems: [],
+    deptHeadDirectiveItems: [],
     specialNoteItems: [],
   };
 }
@@ -210,10 +210,28 @@ function getStarredSections(report: WeeklyReport | null): StarredSections {
     requestItems: sections.requestItems.filter(
       (item) => item.content.trim() && isImportantTaskItem(item)
     ),
+    deptHeadDirectiveItems: sections.deptHeadDirectiveItems.filter((item) =>
+      item.content.trim()
+    ),
     specialNoteItems: sections.specialNoteItems.filter(
       (item) => item.content.trim() && isImportantTaskItem(item)
     ),
   };
+}
+
+function getDeptHeadDirectiveItems(report: WeeklyReport, authorName: string): ReportTaskItem[] {
+  const sections = getReportSections(report);
+  return sections.deptHeadDirectiveItems
+    .filter((item) => item.content.trim())
+    .map((item) =>
+      item.assigneeName?.trim()
+        ? item
+        : {
+            ...item,
+            assigneeUserId: item.assigneeUserId ?? report.userId,
+            assigneeName: authorName,
+          }
+    );
 }
 
 function TeamSummaryCard({
@@ -223,8 +241,7 @@ function TeamSummaryCard({
   summary: TeamWeeklySummary;
   activeSection: SummarySectionKey;
 }) {
-  const items =
-    activeSection === "deptHeadDirectives" ? [] : summary.itemsBySection[activeSection];
+  const items = summary.itemsBySection[activeSection];
   const styles = SECTION_STYLES[activeSection];
   const showStatus = activeSection === "weeklyWorkItems";
   const listRef = useRef<HTMLUListElement>(null);
@@ -320,31 +337,40 @@ function WeeklySummaryContent() {
     (async () => {
       setLoading(true);
       try {
-        let teams: Team[];
-        let users: User[];
-
-        if (user.role === "team_leader") {
-          if (!user.teamId) {
-            if (!cancelled) setSummaries([]);
-            return;
-          }
-          const [team, teamUsers] = await Promise.all([
-            getTeam(user.teamId),
-            getUsersByTeam(user.teamId),
-          ]);
-          teams = team ? [team] : [];
-          users = teamUsers;
-        } else {
-          [teams, users] = await Promise.all([getAllTeams(), getAllUsers()]);
-        }
+        const [teams, users] = await Promise.all([
+          getAllTeams(),
+          getUsersByRoles(["member", "team_leader", "admin"]),
+        ]);
 
         const sortedTeams = [...teams].sort((a, b) => a.name.localeCompare(b.name, "ko"));
         const teamLeaders = sortedTeams.map((team) => getTeamLeader(team, users));
         const leaderIds = Array.from(
           new Set(teamLeaders.map((leader) => leader?.id).filter((id): id is string => Boolean(id)))
         );
-        const reports = await getWeeklyReportsByUsersAndWeek(leaderIds, selectedWeekKey);
+        const teamIds = new Set(sortedTeams.map((team) => team.id));
+        const reportUserIds = Array.from(
+          new Set(
+            users
+              .filter(
+                (candidate) =>
+                  (candidate.teamId !== null && teamIds.has(candidate.teamId)) ||
+                  leaderIds.includes(candidate.id)
+              )
+              .map((candidate) => candidate.id)
+          )
+        );
+        const reports = await getSubmittedWeeklyReportsByUsersAndWeek(
+          reportUserIds,
+          selectedWeekKey
+        );
         const reportByUserId = new Map(reports.map((report) => [report.userId, report]));
+        const userById = new Map(users.map((reportUser) => [reportUser.id, reportUser]));
+        const reportsByTeamId = new Map<string, WeeklyReport[]>();
+        reports.forEach((report) => {
+          const teamReports = reportsByTeamId.get(report.teamId) ?? [];
+          teamReports.push(report);
+          reportsByTeamId.set(report.teamId, teamReports);
+        });
 
         if (cancelled) return;
 
@@ -352,11 +378,23 @@ function WeeklySummaryContent() {
           sortedTeams.map((team, index) => {
             const leader = teamLeaders[index];
             const report = leader ? reportByUserId.get(leader.id) ?? null : null;
+            const leaderSections = getStarredSections(report);
+            const deptHeadDirectiveItems = sortReportItems(
+              (reportsByTeamId.get(team.id) ?? []).flatMap((teamReport) =>
+                getDeptHeadDirectiveItems(
+                  teamReport,
+                  userById.get(teamReport.userId)?.name ?? teamReport.userId
+                )
+              )
+            );
             return {
               team,
               leader,
               report,
-              itemsBySection: getStarredSections(report),
+              itemsBySection: {
+                ...leaderSections,
+                deptHeadDirectiveItems,
+              },
             };
           })
         );
@@ -387,11 +425,6 @@ function WeeklySummaryContent() {
     return SUMMARY_TABS.reduce<Record<SummarySectionKey, number>>(
       (counts, tab) => {
         const sectionKey = tab.key;
-        if (sectionKey === "deptHeadDirectives") {
-          counts.deptHeadDirectives = 0;
-          return counts;
-        }
-
         const targetSummaries =
           sectionKey === "weeklyWorkItems" ? selectedWeeklySummaries : summaries;
 
@@ -401,7 +434,7 @@ function WeeklySummaryContent() {
         );
         return counts;
       },
-      { weeklyWorkItems: 0, requestItems: 0, deptHeadDirectives: 0, specialNoteItems: 0 }
+      { weeklyWorkItems: 0, requestItems: 0, deptHeadDirectiveItems: 0, specialNoteItems: 0 }
     );
   }, [selectedWeeklySummaries, summaries]);
 
@@ -522,7 +555,7 @@ function WeeklySummaryContent() {
 
 export default function WeeklySummaryPage() {
   return (
-    <RoleGuard allowed={["team_leader", "part_leader", "admin"]}>
+    <RoleGuard allowed={["member", "team_leader", "part_leader", "admin"]}>
       <WeeklySummaryContent />
     </RoleGuard>
   );

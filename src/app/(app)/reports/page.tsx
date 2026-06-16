@@ -3,18 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   addDays,
-  addMonths,
-  eachDayOfInterval,
-  endOfMonth,
-  endOfWeek,
   format,
-  isSameDay,
-  isSameMonth,
-  isSameWeek,
   parseISO,
-  startOfMonth,
-  startOfWeek,
-  subMonths,
 } from "date-fns";
 import { CalendarCheck, PenLine } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,7 +17,7 @@ import { SubmitStatusBadge, ProgressBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { WeeklyReportForm } from "@/components/reports/WeeklyReportForm";
 import { ReportDetailView } from "@/components/reports/ReportDetailView";
-import { listRecentWeekKeys, getCurrentWeekKey, getWeekKey, getWeekLabel } from "@/lib/week-key";
+import { listRecentWeekKeys, getCurrentWeekKey, getWeekLabel } from "@/lib/week-key";
 import {
   searchWeeklyReports,
   getAllTeams,
@@ -40,8 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { WeeklyReport, Team, User, ReportTaskStatus } from "@/types";
 
-const CAN_WRITE_ROLES = ["member", "team_leader"];
-const WEEKDAY_LABELS = ["토", "일", "월", "화", "수", "목", "금"];
+const CAN_WRITE_ROLES = ["team_leader"];
 
 function weekRangeLabel(weekKey: string) {
   const start = parseISO(weekKey);
@@ -55,6 +44,7 @@ function getReportTaskStatusCounts(report: WeeklyReport): Record<ReportTaskStatu
     ...(report.thisWeekWorkItems ?? []),
     ...(report.nextWeekPlanItems ?? []),
     ...(report.requestItems ?? []),
+    ...(report.deptHeadDirectiveItems ?? []),
     ...(report.specialNoteItems ?? []),
   ];
 
@@ -142,144 +132,6 @@ function sortUsersByTeamHierarchy(users: User[], teams: Team[]) {
     .forEach(append);
 
   return ordered;
-}
-
-function MemberWeekCalendar({
-  reports,
-  onSelectWeek,
-}: {
-  reports: WeeklyReport[];
-  onSelectWeek: (weekKey: string, report: WeeklyReport | null) => void;
-}) {
-  const reportByWeek = new Map(reports.map((report) => [report.weekKey, report]));
-  const currentWeekKey = getCurrentWeekKey();
-  const currentWeekStart = parseISO(currentWeekKey);
-  const [visibleMonth, setVisibleMonth] = useState(currentWeekStart);
-  const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
-  const days = eachDayOfInterval({
-    start: startOfWeek(startOfMonth(visibleMonth), { weekStartsOn: 6 }),
-    end: endOfWeek(endOfMonth(visibleMonth), { weekStartsOn: 6 }),
-  });
-  const weeks = Array.from({ length: Math.ceil(days.length / 7) }, (_, index) =>
-    days.slice(index * 7, index * 7 + 7)
-  );
-
-  const getStatus = (weekKey: string) => {
-    const report = reportByWeek.get(weekKey);
-    if (report?.submitStatus === "submitted") return "제출완료";
-    if (report?.submitStatus === "draft") return "임시저장";
-    if (weekKey === currentWeekKey) return "작성 주";
-    return "미작성";
-  };
-
-  return (
-    <Card
-      title="주간보고 캘린더"
-      className="h-fit"
-    >
-      <div className="mb-3 flex flex-wrap gap-2 text-xs">
-        <span className="rounded-full bg-green-50 px-2 py-1 text-green-700">제출완료</span>
-        <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">임시저장</span>
-        <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">작성 주</span>
-      </div>
-
-      <div className="mb-3 flex items-center justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setVisibleMonth((month) => subMonths(month, 1))}
-        >
-          이전 달
-        </Button>
-        <p className="text-base font-semibold text-slate-900">{format(visibleMonth, "yyyy년 M월")}</p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setVisibleMonth((month) => addMonths(month, 1))}
-        >
-          다음 달
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-7 overflow-hidden rounded-lg border border-slate-200 bg-white">
-        {WEEKDAY_LABELS.map((label) => (
-          <div
-            key={label}
-            className="border-b border-slate-200 bg-slate-50 px-1 py-1.5 text-center text-[11px] font-semibold text-slate-500"
-          >
-            {label}
-          </div>
-        ))}
-
-        {weeks.map((week) => {
-          const weekStart = week[0];
-          const weekKey = getWeekKey(weekStart);
-          const report = reportByWeek.get(weekKey) ?? null;
-          const submitted = report?.submitStatus === "submitted";
-          const draft = report?.submitStatus === "draft";
-          const isCurrentWeek = weekKey === currentWeekKey;
-          const status = getStatus(weekKey);
-          const isHoveredWeek = hoveredDate
-            ? isSameWeek(weekStart, hoveredDate, { weekStartsOn: 6 })
-            : false;
-
-          return (
-            <div key={weekKey} className="relative col-span-7 grid grid-cols-7">
-              <div
-                className={cn(
-                  "pointer-events-none absolute left-1 right-1 top-8 z-10 flex h-6 items-center justify-center rounded-full text-xs font-semibold shadow-sm",
-                  submitted && "bg-green-100 text-green-700",
-                  draft && "bg-amber-100 text-amber-700",
-                  isCurrentWeek && !submitted && !draft && "bg-blue-100 text-blue-700",
-                  !submitted && !draft && !isCurrentWeek && "bg-slate-100 text-slate-500"
-                )}
-              >
-                {status}
-              </div>
-
-              {week.map((day) => {
-                const dayWeekKey = getWeekKey(day);
-                const dayReport = reportByWeek.get(dayWeekKey) ?? null;
-
-                return (
-                  <button
-                    key={format(day, "yyyy-MM-dd")}
-                    type="button"
-                    onMouseEnter={() => setHoveredDate(day)}
-                    onFocus={() => setHoveredDate(day)}
-                    onClick={() => onSelectWeek(dayWeekKey, dayReport)}
-                    className={cn(
-                      "relative min-h-16 border-b border-r border-slate-200 p-1 text-left transition-colors",
-                      !isSameMonth(day, visibleMonth) && "bg-slate-50 text-slate-300",
-                      isSameMonth(day, visibleMonth) && "bg-white text-slate-700",
-                      isHoveredWeek && "bg-slate-100",
-                      submitted && "bg-green-50 hover:bg-green-100",
-                      draft && "bg-amber-50 hover:bg-amber-100",
-                      isCurrentWeek &&
-                        !submitted &&
-                        !draft &&
-                        "bg-blue-50 hover:bg-blue-100"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold leading-none",
-                        isSameDay(day, new Date()) ? "bg-blue-600 text-white" : "text-slate-700"
-                      )}
-                    >
-                      {format(day, "d")}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
 }
 
 function TeamMemberReportOverview({
@@ -486,12 +338,10 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (!user) return;
-    loadReports();
+    queueMicrotask(() => {
+      void loadReports();
+    });
   }, [user, loadReports]);
-
-  useEffect(() => {
-    setHistoryPage(1);
-  }, [keyword]);
 
   const filtered = keyword
     ? reports.filter(
@@ -499,19 +349,22 @@ export default function ReportsPage() {
           report.thisWeekWork.includes(keyword) ||
           report.nextWeekPlan.includes(keyword) ||
           report.requests.includes(keyword) ||
+          report.deptHeadDirectives.includes(keyword) ||
           report.specialNotes.includes(keyword)
       )
     : reports;
   const historyPageSize = 5;
   const historyPageCount = Math.max(1, Math.ceil(filtered.length / historyPageSize));
+  const boundedHistoryPage = Math.min(historyPage, historyPageCount);
   const pagedHistory = filtered.slice(
-    (historyPage - 1) * historyPageSize,
-    historyPage * historyPageSize
+    (boundedHistoryPage - 1) * historyPageSize,
+    boundedHistoryPage * historyPageSize
   );
 
-  useEffect(() => {
-    if (historyPage > historyPageCount) setHistoryPage(historyPageCount);
-  }, [historyPage, historyPageCount]);
+  const handleKeywordChange = (value: string) => {
+    setKeyword(value);
+    setHistoryPage(1);
+  };
 
   const userMap = Object.fromEntries(users.map((u) => [u.id, u.name]));
   const teamMap = Object.fromEntries(teams.map((t) => [t.id, t.name]));
@@ -549,14 +402,6 @@ export default function ReportsPage() {
     setWriteFormKey(null);
   };
 
-  const handleMemberWeekSelect = (targetWeekKey: string, report: WeeklyReport | null) => {
-    if (!report || report.submitStatus === "draft") {
-      openWriteModal(targetWeekKey, report);
-      return;
-    }
-    setDetailReport(report);
-  };
-
   const handleSaved = () => {
     loadReports({ silent: true });
   };
@@ -574,7 +419,8 @@ export default function ReportsPage() {
     await loadReports();
   };
 
-  const canManageOwnReport = detailReport && user && detailReport.userId === user.id;
+  const canManageOwnReport =
+    detailReport && user && detailReport.userId === user.id && user.role !== "member";
 
   const canFilterTeam = user?.role === "admin" || user?.role === "part_leader";
   const canFilterAuthor =
@@ -590,11 +436,11 @@ export default function ReportsPage() {
           <h2 className="text-2xl font-bold text-slate-900">보고서</h2>
           <p className="text-slate-500">
             {isMember
-              ? "주간보고 작성, 제출 여부 확인, 지난 보고 열람을 한 화면에서 처리합니다."
+              ? "본인이 작성한 보고서를 검색하고 확인합니다."
               : "보고서를 작성하고 검색할 수 있습니다."}
           </p>
         </div>
-        {canWrite && (
+        {canWrite && !isMember && (
           <Button onClick={() => openWriteModal(currentWeekKey)}>
             <PenLine className="h-4 w-4" />
             주간보고 작성
@@ -603,72 +449,65 @@ export default function ReportsPage() {
       </div>
 
       {isMember && (
-        <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
-          <MemberWeekCalendar reports={reports} onSelectWeek={handleMemberWeekSelect} />
-
-          <Card
-            title="지난 주간보고"
-            action={
-              <div className="w-64">
-                <Input
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  placeholder="내용 검색"
-                />
-              </div>
-            }
-          >
-            {loading ? (
-              <LoadingSpinner />
-            ) : filtered.length === 0 ? (
-              <EmptyState
-                title="보고서가 없습니다"
-                description="캘린더에서 원하는 주간을 선택해 작성하세요."
+        <Card
+          title="내 보고서"
+          action={
+            <div className="w-64">
+              <Input
+                value={keyword}
+                onChange={(e) => handleKeywordChange(e.target.value)}
+                placeholder="내용 검색"
               />
-            ) : (
-              <div className="space-y-3">
-                {pagedHistory.map((report) => (
-                  <button
-                    key={report.id}
-                    type="button"
-                    onClick={() => setDetailReport(report)}
-                    className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/30"
-                  >
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <CalendarCheck className="h-4 w-4 text-slate-400" />
-                      <span className="font-medium text-slate-900">
-                        {getWeekLabel(report.weekKey)}
-                      </span>
-                      <SubmitStatusBadge status={report.submitStatus} />
-                    </div>
-                    <TaskStatusCountBadges report={report} />
-                  </button>
-                ))}
-                {historyPageCount > 1 && (
-                  <div className="flex flex-wrap justify-end gap-1 pt-2">
-                    {Array.from({ length: historyPageCount }, (_, index) => index + 1).map(
-                      (page) => (
-                        <button
-                          key={page}
-                          type="button"
-                          onClick={() => setHistoryPage(page)}
-                          className={cn(
-                            "h-8 min-w-8 rounded border px-2 text-sm font-medium",
-                            page === historyPage
-                              ? "border-blue-600 bg-blue-600 text-white"
-                              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                          )}
-                        >
-                          {page}
-                        </button>
-                      )
-                    )}
+            </div>
+          }
+        >
+          {loading ? (
+            <LoadingSpinner />
+          ) : filtered.length === 0 ? (
+            <EmptyState title="보고서가 없습니다" description="작성한 보고서가 없습니다." />
+          ) : (
+            <div className="space-y-3">
+              {pagedHistory.map((report) => (
+                <button
+                  key={report.id}
+                  type="button"
+                  onClick={() => setDetailReport(report)}
+                  className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/30"
+                >
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <CalendarCheck className="h-4 w-4 text-slate-400" />
+                    <span className="font-medium text-slate-900">
+                      {getWeekLabel(report.weekKey)}
+                    </span>
+                    <SubmitStatusBadge status={report.submitStatus} />
                   </div>
-                )}
-              </div>
-            )}
-          </Card>
-        </div>
+                  <TaskStatusCountBadges report={report} />
+                </button>
+              ))}
+              {historyPageCount > 1 && (
+                <div className="flex flex-wrap justify-end gap-1 pt-2">
+                  {Array.from({ length: historyPageCount }, (_, index) => index + 1).map(
+                    (page) => (
+                      <button
+                        key={page}
+                        type="button"
+                        onClick={() => setHistoryPage(page)}
+                        className={cn(
+                          "h-8 min-w-8 rounded border px-2 text-sm font-medium",
+                          page === boundedHistoryPage
+                            ? "border-blue-600 bg-blue-600 text-white"
+                            : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        )}
+                      >
+                        {page}
+                      </button>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
       )}
 
       {!isMember && !isTeamLeader && (
@@ -712,7 +551,7 @@ export default function ReportsPage() {
             <FormField label="키워드">
               <Input
                 value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
+                onChange={(e) => handleKeywordChange(e.target.value)}
                 placeholder="검색어 입력"
               />
             </FormField>
@@ -728,7 +567,7 @@ export default function ReportsPage() {
               <div className="w-64">
                 <Input
                   value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
+                  onChange={(e) => handleKeywordChange(e.target.value)}
                   placeholder="내용 검색"
                 />
               </div>

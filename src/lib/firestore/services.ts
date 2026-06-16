@@ -81,6 +81,20 @@ export async function getAllUsers(options: UserQueryOptions = {}): Promise<User[
   return snap.docs.map((d) => docToUser(d));
 }
 
+export async function getUsersByRoles(
+  roles: UserRole[],
+  options: UserQueryOptions = {}
+): Promise<User[]> {
+  if (roles.length === 0) return [];
+
+  const constraints: QueryConstraint[] = [where("role", "in", roles)];
+  if (!options.includeInactive) constraints.push(where("isActive", "==", true));
+
+  const q = query(collection(db, "users"), ...constraints);
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => docToUser(d));
+}
+
 export async function getUsersByTeam(
   teamId: string,
   options: UserQueryOptions = {}
@@ -190,6 +204,31 @@ export async function getWeeklyReportsByUsersAndWeek(
   return reports.filter((report): report is WeeklyReport => report !== null);
 }
 
+export async function getSubmittedWeeklyReport(
+  userId: string,
+  weekKey: string
+): Promise<WeeklyReport | null> {
+  const q = query(
+    collection(db, "weeklyReports"),
+    where("userId", "==", userId),
+    where("weekKey", "==", weekKey),
+    where("submitStatus", "==", "submitted")
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  return docToWeeklyReport(snap.docs[0]);
+}
+
+export async function getSubmittedWeeklyReportsByUsersAndWeek(
+  userIds: string[],
+  weekKey: string
+): Promise<WeeklyReport[]> {
+  const reports = await Promise.all(
+    userIds.map((userId) => getSubmittedWeeklyReport(userId, weekKey))
+  );
+  return reports.filter((report): report is WeeklyReport => report !== null);
+}
+
 export async function getWeeklyReportsByUsers(userIds: string[]): Promise<WeeklyReport[]> {
   const reportGroups = await Promise.all(userIds.map((userId) => getWeeklyReportsByUser(userId)));
   return reportGroups.flat();
@@ -204,11 +243,13 @@ export async function saveWeeklyReport(
     thisWeekWork: string;
     nextWeekPlan: string;
     requests: string;
+    deptHeadDirectives: string;
     specialNotes: string;
     weeklyWorkItems?: ReportTaskItem[];
     thisWeekWorkItems?: ReportTaskItem[];
     nextWeekPlanItems?: ReportTaskItem[];
     requestItems?: ReportTaskItem[];
+    deptHeadDirectiveItems?: ReportTaskItem[];
     specialNoteItems?: ReportTaskItem[];
     importance: Importance;
     status: ProgressStatus;

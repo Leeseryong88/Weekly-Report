@@ -54,11 +54,13 @@ export interface WeeklyReport {
   thisWeekWork: string;
   nextWeekPlan: string;
   requests: string;
+  deptHeadDirectives: string;
   specialNotes: string;
   weeklyWorkItems?: ReportTaskItem[];
   thisWeekWorkItems?: ReportTaskItem[];
   nextWeekPlanItems?: ReportTaskItem[];
   requestItems?: ReportTaskItem[];
+  deptHeadDirectiveItems?: ReportTaskItem[];
   specialNoteItems?: ReportTaskItem[];
   importance: Importance;
   status: ProgressStatus;

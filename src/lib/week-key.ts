@@ -40,7 +40,7 @@ export function getWeeklySummaryPath(): string {
 export function getDefaultReportPath(role: UserRole, date: Date = new Date()): string {
   if (role === "part_leader" || role === "team_leader") return getWeeklySummaryPath();
   if (role === "admin") return getTeamWeeklyReportPath(date);
-  return "/reports";
+  return "/reports/write";
 }
 
 export function getWeekLabel(weekKey: string): string {

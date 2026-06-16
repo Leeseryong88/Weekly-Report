@@ -2,11 +2,16 @@ import { generateId } from "@/lib/utils";
 import type { Importance, ProgressStatus, ReportTaskItem, WeeklyReport } from "@/types";
 import { PROGRESS_LABELS } from "@/types";
 
-export type ReportSectionKey = "weeklyWorkItems" | "requestItems" | "specialNoteItems";
+export type ReportSectionKey =
+  | "weeklyWorkItems"
+  | "requestItems"
+  | "deptHeadDirectiveItems"
+  | "specialNoteItems";
 
 export const REPORT_SECTION_LABELS: Record<ReportSectionKey, string> = {
   weeklyWorkItems: "주간업무",
   requestItems: "의사결정사항",
+  deptHeadDirectiveItems: "부서장 지시",
   specialNoteItems: "특이사항",
 };
 
@@ -17,6 +22,7 @@ export const REPORT_SECTIONS: {
 }[] = [
   { key: "weeklyWorkItems", label: REPORT_SECTION_LABELS.weeklyWorkItems },
   { key: "requestItems", label: REPORT_SECTION_LABELS.requestItems, optional: true },
+  { key: "deptHeadDirectiveItems", label: REPORT_SECTION_LABELS.deptHeadDirectiveItems, optional: true },
   { key: "specialNoteItems", label: REPORT_SECTION_LABELS.specialNoteItems, optional: true },
 ];
 
@@ -96,6 +102,9 @@ export function getReportSections(report: WeeklyReport): ReportFormSections {
   return {
     weeklyWorkItems: sortReportItems(getWeeklyWorkItems(report)),
     requestItems: sortReportItems(itemsFromStored(report.requestItems, report.requests)),
+    deptHeadDirectiveItems: sortReportItems(
+      itemsFromStored(report.deptHeadDirectiveItems, report.deptHeadDirectives)
+    ),
     specialNoteItems: sortReportItems(itemsFromStored(report.specialNoteItems, report.specialNotes)),
   };
 }
@@ -104,6 +113,7 @@ export function emptyFormSections(defaultItemPatch: Partial<ReportTaskItem> = {}
   return {
     weeklyWorkItems: [createEmptyTaskItem(defaultItemPatch)],
     requestItems: [],
+    deptHeadDirectiveItems: [],
     specialNoteItems: [],
   };
 }
@@ -146,6 +156,7 @@ export function computeReportMeta(sections: ReportFormSections) {
   const allItems = [
     ...sections.weeklyWorkItems,
     ...sections.requestItems,
+    ...sections.deptHeadDirectiveItems,
     ...sections.specialNoteItems,
   ];
   return computeAggregateMeta(allItems);

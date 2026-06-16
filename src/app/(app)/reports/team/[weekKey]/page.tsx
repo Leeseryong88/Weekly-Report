@@ -58,6 +58,7 @@ function getReportTaskStatusCounts(report: WeeklyReport): Record<ReportTaskStatu
     ...(report.thisWeekWorkItems ?? []),
     ...(report.nextWeekPlanItems ?? []),
     ...(report.requestItems ?? []),
+    ...(report.deptHeadDirectiveItems ?? []),
     ...(report.specialNoteItems ?? []),
   ];
 

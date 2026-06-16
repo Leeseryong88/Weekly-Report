@@ -28,6 +28,23 @@
       "collectionGroup": "weeklyReports",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "weekKey", "order": "ASCENDING" },
+        { "fieldPath": "submitStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "isActive", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "weeklyReports",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "teamId", "order": "ASCENDING" },
         { "fieldPath": "weekKey", "order": "ASCENDING" }
       ]

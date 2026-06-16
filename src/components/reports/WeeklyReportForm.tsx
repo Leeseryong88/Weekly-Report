@@ -73,8 +73,11 @@ const WEEKDAY_LABELS = ["토", "일", "월", "화", "수", "목", "금"];
 const SECTION_DESCRIPTIONS: Record<ReportSectionKey, string> = {
   weeklyWorkItems: "이번 주 진행 업무를 항목별로 정리하세요.",
   requestItems: "의사결정이 필요하거나 합의해야 하는 내용을 정리하세요.",
+  deptHeadDirectiveItems: "부서장 지시사항과 후속 조치가 필요한 내용을 정리하세요.",
   specialNoteItems: "공유가 필요한 이슈, 리스크, 참고사항을 남기세요.",
 };
+
+type OptionalReportSectionKey = Exclude<ReportSectionKey, "weeklyWorkItems">;
 
 function SelectableMemberReportItem({
   item,
@@ -347,6 +350,7 @@ export function WeeklyReportForm({
   const [teamMemberReportsLoading, setTeamMemberReportsLoading] = useState(false);
   const [selectedMemberReportItemId, setSelectedMemberReportItemId] = useState<string | null>(null);
   const [showDecisionSection, setShowDecisionSection] = useState(false);
+  const [showDeptHeadDirectiveSection, setShowDeptHeadDirectiveSection] = useState(false);
   const [showSpecialNoteSection, setShowSpecialNoteSection] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const hasLoadedOnceRef = useRef(false);
@@ -370,12 +374,16 @@ export function WeeklyReportForm({
         setReport(r);
         setSections(loadedSections);
         setShowDecisionSection(hasSectionContent(loadedSections.requestItems));
+        setShowDeptHeadDirectiveSection(
+          hasSectionContent(loadedSections.deptHeadDirectiveItems)
+        );
         setShowSpecialNoteSection(hasSectionContent(loadedSections.specialNoteItems));
         setFileUrls(r.fileUrls);
       } else {
         setReport(null);
         setSections(emptyFormSections(defaultTaskPatch));
         setShowDecisionSection(false);
+        setShowDeptHeadDirectiveSection(false);
         setShowSpecialNoteSection(false);
         setFileUrls([]);
       }
@@ -482,10 +490,12 @@ export function WeeklyReportForm({
     }));
   };
 
-  const showOptionalSection = (sectionKey: "requestItems" | "specialNoteItems") => {
+  const showOptionalSection = (sectionKey: OptionalReportSectionKey) => {
     if (sectionKey === "requestItems") {
       setShowDecisionSection(true);
-    } else {
+    } else if (sectionKey === "deptHeadDirectiveItems") {
+      setShowDeptHeadDirectiveSection(true);
+    } else if (sectionKey === "specialNoteItems") {
       setShowSpecialNoteSection(true);
     }
 
@@ -514,6 +524,9 @@ export function WeeklyReportForm({
     if (sectionKey === "requestItems") {
       setShowDecisionSection(true);
     }
+    if (sectionKey === "deptHeadDirectiveItems") {
+      setShowDeptHeadDirectiveSection(true);
+    }
     if (sectionKey === "specialNoteItems") {
       setShowSpecialNoteSection(true);
     }
@@ -537,9 +550,15 @@ export function WeeklyReportForm({
       const savableSections: ReportFormSections = {
         weeklyWorkItems: sections.weeklyWorkItems,
         requestItems: sections.requestItems.filter((item) => item.content.trim()),
+        deptHeadDirectiveItems: sections.deptHeadDirectiveItems.filter((item) =>
+          item.content.trim()
+        ),
         specialNoteItems: sections.specialNoteItems.filter((item) => item.content.trim()),
       };
       const weeklyText = serializeTaskItems(savableSections.weeklyWorkItems);
+      const deptHeadDirectivesText = serializeTaskItems(
+        savableSections.deptHeadDirectiveItems
+      );
       const meta = computeReportMeta(savableSections);
       const id = await saveWeeklyReport(report?.id ?? null, {
         weekKey: selectedWeekKey,
@@ -548,9 +567,11 @@ export function WeeklyReportForm({
         thisWeekWork: weeklyText,
         nextWeekPlan: "",
         requests: serializeTaskItems(savableSections.requestItems),
+        deptHeadDirectives: deptHeadDirectivesText,
         specialNotes: serializeTaskItems(savableSections.specialNoteItems),
         weeklyWorkItems: savableSections.weeklyWorkItems,
         requestItems: savableSections.requestItems,
+        deptHeadDirectiveItems: savableSections.deptHeadDirectiveItems,
         specialNoteItems: savableSections.specialNoteItems,
         importance: meta.importance,
         status: meta.status,
@@ -564,10 +585,12 @@ export function WeeklyReportForm({
         submitStatus,
         weeklyWorkItems: savableSections.weeklyWorkItems,
         requestItems: savableSections.requestItems,
+        deptHeadDirectiveItems: savableSections.deptHeadDirectiveItems,
         specialNoteItems: savableSections.specialNoteItems,
         thisWeekWork: weeklyText,
         nextWeekPlan: "",
         requests: serializeTaskItems(savableSections.requestItems),
+        deptHeadDirectives: deptHeadDirectivesText,
         specialNotes: serializeTaskItems(savableSections.specialNoteItems),
         importance: meta.importance,
         status: meta.status,
@@ -627,6 +650,12 @@ export function WeeklyReportForm({
     if (sectionKey === "weeklyWorkItems") return true;
     if (sectionKey === "requestItems") {
       return showDecisionSection || hasSectionContent(sections.requestItems);
+    }
+    if (sectionKey === "deptHeadDirectiveItems") {
+      return (
+        showDeptHeadDirectiveSection ||
+        hasSectionContent(sections.deptHeadDirectiveItems)
+      );
     }
     return showSpecialNoteSection || hasSectionContent(sections.specialNoteItems);
   };
@@ -690,9 +719,7 @@ export function WeeklyReportForm({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      showOptionalSection(section.key as "requestItems" | "specialNoteItems")
-                    }
+                    onClick={() => showOptionalSection(section.key as OptionalReportSectionKey)}
                     className="h-8 border-dashed bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                   >
                     <Plus className="h-4 w-4" />

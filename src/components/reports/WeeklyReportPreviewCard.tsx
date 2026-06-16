@@ -17,6 +17,12 @@ const SECTION_STYLES = {
     item: "border-blue-100 bg-white",
     label: "의사결정",
   },
+  deptHeadDirectiveItems: {
+    wrapper: "border-amber-100 bg-amber-50",
+    title: "text-amber-800",
+    item: "border-amber-100 bg-white",
+    label: "지시",
+  },
   specialNoteItems: {
     wrapper: "border-violet-100 bg-violet-50",
     title: "text-violet-800",
@@ -58,6 +64,7 @@ export function WeeklyReportPreviewCard({
                   "rounded-full px-2 py-0.5 text-xs font-semibold",
                   section.key === "weeklyWorkItems" && "bg-slate-200 text-slate-700",
                   section.key === "requestItems" && "bg-blue-100 text-blue-700",
+                  section.key === "deptHeadDirectiveItems" && "bg-amber-100 text-amber-700",
                   section.key === "specialNoteItems" && "bg-violet-100 text-violet-700"
                 )}
               >

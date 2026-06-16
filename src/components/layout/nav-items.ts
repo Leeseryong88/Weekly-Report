@@ -16,10 +16,16 @@ export interface AppNavItem {
 export function getAppNavItems(role: UserRole): AppNavItem[] {
   const items: AppNavItem[] = [
     {
+      href: "/reports/write",
+      label: "주간보고",
+      icon: FileEdit,
+      roles: ["member"],
+    },
+    {
       href: getWeeklySummaryPath(),
       label: "주간보고 취합",
       icon: Star,
-      roles: ["team_leader", "part_leader", "admin"],
+      roles: ["member", "team_leader", "part_leader", "admin"],
     },
     {
       href: getTeamWeeklyReportPath(),
