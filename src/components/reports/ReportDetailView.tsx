@@ -95,6 +95,11 @@ function SectionItemsTable({
                     </td>
                   )}
                   <td className="whitespace-pre-wrap px-3 py-2 text-slate-700">
+                    {item.directiveOwner?.trim() && (
+                      <span className="mr-2 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                        <HighlightedText text={item.directiveOwner} keyword={highlightKeyword} />
+                      </span>
+                    )}
                     <HighlightedText text={item.content} keyword={highlightKeyword} />
                   </td>
                 </tr>

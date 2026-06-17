@@ -294,6 +294,11 @@ function TeamSummaryCard({
                   )}
                 </div>
                 <span className="min-w-0 flex-1 whitespace-pre-wrap text-[13px] leading-5 text-slate-700">
+                  {item.directiveOwner?.trim() && (
+                    <span className="mr-1.5 inline-flex rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-semibold text-amber-800">
+                      {item.directiveOwner}
+                    </span>
+                  )}
                   {item.content}
                 </span>
               </div>

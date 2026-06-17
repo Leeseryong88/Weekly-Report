@@ -101,7 +101,14 @@ export function WeeklyReportPreviewCard({
                           />
                         </>
                       )}
-                      <p className="min-w-0 whitespace-pre-wrap text-slate-700">{item.content}</p>
+                      <p className="min-w-0 whitespace-pre-wrap text-slate-700">
+                        {item.directiveOwner?.trim() && (
+                          <span className="mr-2 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                            {item.directiveOwner}
+                          </span>
+                        )}
+                        {item.content}
+                      </p>
                     </div>
                   </li>
                 );

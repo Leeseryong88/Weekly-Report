@@ -81,17 +81,22 @@ type OptionalReportSectionKey = Exclude<ReportSectionKey, "weeklyWorkItems">;
 
 function SelectableMemberReportItem({
   item,
+  sectionKey,
   selected,
   onSelect,
   onAdd,
   onCancel,
 }: {
   item: ReportTaskItem;
+  sectionKey: ReportSectionKey;
   selected: boolean;
   onSelect: () => void;
   onAdd: () => void;
   onCancel: () => void;
 }) {
+  const isDeptHeadDirective = sectionKey === "deptHeadDirectiveItems";
+  const directiveOwner = item.directiveOwner?.trim() || "부서장";
+
   return (
     <li
       className={cn(
@@ -100,17 +105,28 @@ function SelectableMemberReportItem({
       )}
     >
       <button type="button" className="w-full text-left" onClick={onSelect}>
-        <div className="flex items-start gap-1.5">
-          <span className="flex h-4 w-4 items-center justify-center">
-            {(item.importance === "high" || item.importance === "urgent") && (
-              <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
-            )}
-          </span>
-          <TaskStatusBadge status={item.status} className="shrink-0 px-1.5 py-0.5 text-[10px]" />
-          <span className="min-w-0 flex-1 line-clamp-3 whitespace-pre-wrap pt-[1px]">
-            {item.content}
-          </span>
-        </div>
+        {isDeptHeadDirective ? (
+          <div className="flex items-start gap-1.5">
+            <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+              {directiveOwner}
+            </span>
+            <span className="min-w-0 flex-1 line-clamp-3 whitespace-pre-wrap pt-[1px]">
+              {item.content}
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-start gap-1.5">
+            <span className="flex h-4 w-4 items-center justify-center">
+              {(item.importance === "high" || item.importance === "urgent") && (
+                <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+              )}
+            </span>
+            <TaskStatusBadge status={item.status} className="shrink-0 px-1.5 py-0.5 text-[10px]" />
+            <span className="min-w-0 flex-1 line-clamp-3 whitespace-pre-wrap pt-[1px]">
+              {item.content}
+            </span>
+          </div>
+        )}
       </button>
       {selected && (
         <div className="mt-2 flex justify-end gap-1.5">
@@ -302,6 +318,7 @@ function TeamMemberReferencePanel({
                               <SelectableMemberReportItem
                                 key={item.id}
                                 item={item}
+                                sectionKey={section.key}
                                 selected={selectedItemId === itemId}
                                 onSelect={() => onSelectItem(itemId)}
                                 onAdd={() =>
@@ -752,6 +769,7 @@ export function WeeklyReportForm({
                 required={section.key === "weeklyWorkItems"}
                 showStatus={section.key === "weeklyWorkItems"}
                 showAssignee={showTeamMemberReference}
+                showDirectiveOwner={section.key === "deptHeadDirectiveItems"}
                 defaultAssigneeUserId={user.id}
                 defaultAssigneeName={user.name}
               />

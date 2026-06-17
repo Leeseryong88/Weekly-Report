@@ -123,7 +123,14 @@ export function serializeTaskItems(items: ReportTaskItem[]): string {
     .filter((item) => item.content.trim())
     .map((item) => {
       const st = PROGRESS_LABELS[item.status];
-      return `${item.importance === "high" || item.importance === "urgent" ? "★ " : ""}${item.content} (${st})`;
+      const directiveOwner = item.directiveOwner?.trim();
+      const prefix = [
+        item.importance === "high" || item.importance === "urgent" ? "★" : "",
+        directiveOwner ? `[${directiveOwner}]` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return `${prefix ? `${prefix} ` : ""}${item.content} (${st})`;
     })
     .join("\n");
 }

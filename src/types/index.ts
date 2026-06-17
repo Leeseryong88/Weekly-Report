@@ -16,6 +16,8 @@ export interface ReportTaskItem {
   status: ReportTaskStatus;
   assigneeUserId?: string | null;
   assigneeName?: string;
+  directiveOwner?: string;
+  directiveOwnerMode?: "custom";
 }
 
 export type ActionItemStatus = "received" | "in_progress" | "completed" | "on_hold";

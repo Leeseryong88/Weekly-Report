@@ -39,20 +39,30 @@ interface ReportSectionEditorProps {
   required?: boolean;
   showStatus?: boolean;
   showAssignee?: boolean;
+  showDirectiveOwner?: boolean;
   defaultAssigneeUserId?: string | null;
   defaultAssigneeName?: string;
 }
+
+const DIRECTIVE_OWNER_OPTIONS: readonly string[] = ["부문장", "본부장", "파트장"];
+const CUSTOM_DIRECTIVE_OWNER_VALUE = "__custom__";
 
 interface SortableReportTaskRowProps {
   item: ReportTaskItem;
   important: boolean;
   showStatus: boolean;
   showAssignee: boolean;
+  showDirectiveOwner: boolean;
   setContentRef: (id: string, node: HTMLTextAreaElement | null) => void;
   resizeContentTextarea: (node: HTMLTextAreaElement | null) => void;
   onToggleImportant: (item: ReportTaskItem) => void;
   onStatusChange: (itemId: string, status: ReportTaskStatus) => void;
   onAssigneeChange: (itemId: string, assigneeName: string) => void;
+  onDirectiveOwnerChange: (
+    itemId: string,
+    directiveOwner: string,
+    mode?: ReportTaskItem["directiveOwnerMode"]
+  ) => void;
   onContentChange: (itemId: string, content: string, node: HTMLTextAreaElement) => void;
   onContentKeyDown: (
     item: ReportTaskItem,
@@ -66,11 +76,13 @@ function SortableReportTaskRow({
   important,
   showStatus,
   showAssignee,
+  showDirectiveOwner,
   setContentRef,
   resizeContentTextarea,
   onToggleImportant,
   onStatusChange,
   onAssigneeChange,
+  onDirectiveOwnerChange,
   onContentChange,
   onContentKeyDown,
   onRemove,
@@ -79,6 +91,12 @@ function SortableReportTaskRow({
     id: item.id,
   });
   const style = { transform: CSS.Transform.toString(transform), transition };
+  const directiveOwner = item.directiveOwner?.trim() ?? "";
+  const hasPresetDirectiveOwner = DIRECTIVE_OWNER_OPTIONS.includes(directiveOwner);
+  const directiveOwnerSelectValue =
+    item.directiveOwnerMode !== "custom" && (!directiveOwner || hasPresetDirectiveOwner)
+      ? directiveOwner
+      : CUSTOM_DIRECTIVE_OWNER_VALUE;
 
   return (
     <div
@@ -86,13 +104,21 @@ function SortableReportTaskRow({
       style={style}
       className={cn(
         "grid gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:items-center md:p-2",
-        showStatus && showAssignee
-          ? "md:grid-cols-[28px_36px_96px_120px_minmax(220px,1fr)_36px]"
-          : showStatus
-            ? "md:grid-cols-[28px_36px_96px_minmax(220px,1fr)_36px]"
-            : showAssignee
-              ? "md:grid-cols-[28px_36px_120px_minmax(220px,1fr)_36px]"
-              : "md:grid-cols-[28px_36px_minmax(220px,1fr)_36px]",
+        showStatus && showAssignee && showDirectiveOwner
+          ? "md:grid-cols-[28px_36px_96px_120px_132px_minmax(220px,1fr)_36px]"
+          : showStatus && showAssignee
+            ? "md:grid-cols-[28px_36px_96px_120px_minmax(220px,1fr)_36px]"
+            : showStatus && showDirectiveOwner
+              ? "md:grid-cols-[28px_36px_96px_132px_minmax(220px,1fr)_36px]"
+              : showAssignee && showDirectiveOwner
+                ? "md:grid-cols-[28px_36px_120px_132px_minmax(220px,1fr)_36px]"
+                : showStatus
+                  ? "md:grid-cols-[28px_36px_96px_minmax(220px,1fr)_36px]"
+                  : showAssignee
+                    ? "md:grid-cols-[28px_36px_120px_minmax(220px,1fr)_36px]"
+                    : showDirectiveOwner
+                      ? "md:grid-cols-[28px_36px_132px_minmax(220px,1fr)_36px]"
+                      : "md:grid-cols-[28px_36px_minmax(220px,1fr)_36px]",
         isDragging && "relative z-10 border-blue-300 shadow-lg ring-2 ring-blue-100"
       )}
     >
@@ -149,6 +175,38 @@ function SortableReportTaskRow({
         </div>
       )}
 
+      {showDirectiveOwner && (
+        <div className="space-y-1">
+          <span className="block text-xs text-slate-400 md:hidden">부서장</span>
+          <Select
+            value={directiveOwnerSelectValue}
+            onChange={(e) => {
+              const nextValue = e.target.value;
+              if (nextValue === CUSTOM_DIRECTIVE_OWNER_VALUE) {
+                onDirectiveOwnerChange(item.id, hasPresetDirectiveOwner ? "" : directiveOwner, "custom");
+                return;
+              }
+              onDirectiveOwnerChange(item.id, nextValue);
+            }}
+          >
+            <option value="">선택</option>
+            {DIRECTIVE_OWNER_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+            <option value={CUSTOM_DIRECTIVE_OWNER_VALUE}>직접입력</option>
+          </Select>
+          {directiveOwnerSelectValue === CUSTOM_DIRECTIVE_OWNER_VALUE && (
+            <Input
+              value={directiveOwner}
+              onChange={(e) => onDirectiveOwnerChange(item.id, e.target.value, "custom")}
+              placeholder="부서장 입력"
+            />
+          )}
+        </div>
+      )}
+
       <Textarea
         ref={(node) => {
           setContentRef(item.id, node);
@@ -185,6 +243,7 @@ export function ReportSectionEditor({
   required = false,
   showStatus = true,
   showAssignee = false,
+  showDirectiveOwner = false,
   defaultAssigneeUserId = null,
   defaultAssigneeName = "",
 }: ReportSectionEditorProps) {
@@ -310,6 +369,27 @@ export function ReportSectionEditor({
     });
   };
 
+  const updateDirectiveOwner = (
+    id: string,
+    directiveOwner: string,
+    mode?: ReportTaskItem["directiveOwnerMode"]
+  ) => {
+    onChange(
+      sortReportItems(
+        items.map((item) => {
+          if (item.id !== id) return item;
+          const next: ReportTaskItem = { ...item, directiveOwner };
+          if (mode) {
+            next.directiveOwnerMode = mode;
+          } else {
+            delete next.directiveOwnerMode;
+          }
+          return next;
+        })
+      )
+    );
+  };
+
   const updateContent = (id: string, content: string, node: HTMLTextAreaElement) => {
     updateItem(id, { content });
     resizeContentTextarea(node);
@@ -348,19 +428,28 @@ export function ReportSectionEditor({
         <div
           className={cn(
             "hidden gap-2 px-1 pb-2 text-xs font-medium text-slate-500 md:grid",
-            showStatus && showAssignee
-              ? "md:grid-cols-[28px_36px_96px_120px_minmax(220px,1fr)_36px]"
-              : showStatus
-                ? "md:grid-cols-[28px_36px_96px_minmax(220px,1fr)_36px]"
-                : showAssignee
-                  ? "md:grid-cols-[28px_36px_120px_minmax(220px,1fr)_36px]"
-                  : "md:grid-cols-[28px_36px_minmax(220px,1fr)_36px]"
+            showStatus && showAssignee && showDirectiveOwner
+              ? "md:grid-cols-[28px_36px_96px_120px_132px_minmax(220px,1fr)_36px]"
+              : showStatus && showAssignee
+                ? "md:grid-cols-[28px_36px_96px_120px_minmax(220px,1fr)_36px]"
+                : showStatus && showDirectiveOwner
+                  ? "md:grid-cols-[28px_36px_96px_132px_minmax(220px,1fr)_36px]"
+                  : showAssignee && showDirectiveOwner
+                    ? "md:grid-cols-[28px_36px_120px_132px_minmax(220px,1fr)_36px]"
+                    : showStatus
+                      ? "md:grid-cols-[28px_36px_96px_minmax(220px,1fr)_36px]"
+                      : showAssignee
+                        ? "md:grid-cols-[28px_36px_120px_minmax(220px,1fr)_36px]"
+                        : showDirectiveOwner
+                          ? "md:grid-cols-[28px_36px_132px_minmax(220px,1fr)_36px]"
+                          : "md:grid-cols-[28px_36px_minmax(220px,1fr)_36px]"
           )}
         >
           <span />
           <span />
           {showStatus && <span>상태</span>}
           {showAssignee && <span>담당자</span>}
+          {showDirectiveOwner && <span>부서장</span>}
           <span>내용</span>
           <span />
         </div>
@@ -375,6 +464,7 @@ export function ReportSectionEditor({
                   important={isImportantTaskItem(item)}
                   showStatus={showStatus}
                   showAssignee={showAssignee}
+                  showDirectiveOwner={showDirectiveOwner}
                   setContentRef={(id, node) => {
                     contentRefs.current[id] = node;
                   }}
@@ -382,6 +472,7 @@ export function ReportSectionEditor({
                   onToggleImportant={toggleImportant}
                   onStatusChange={updateStatus}
                   onAssigneeChange={updateAssigneeName}
+                  onDirectiveOwnerChange={updateDirectiveOwner}
                   onContentChange={updateContent}
                   onContentKeyDown={handleContentKeyDown}
                   onRemove={removeItem}
